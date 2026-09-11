@@ -47,6 +47,24 @@ def test_event_rejects_naive_timestamp() -> None:
         )
 
 
+def test_event_rejects_oversized_or_deep_payloads() -> None:
+    common = {
+        "rescue_id": uuid4(),
+        "actor": ActorRole.SYSTEM,
+        "event_type": EventType.MISSING_INFORMATION,
+        "idempotency_key": "payload:limits",
+        "trace_id": "trace-limits",
+    }
+    with pytest.raises(ValidationError, match="64 KiB"):
+        Event.model_validate({**common, "payload": {"content": "x" * 65_536}})
+
+    nested: dict[str, object] = {"value": "leaf"}
+    for _ in range(9):
+        nested = {"child": nested}
+    with pytest.raises(ValidationError, match="8 levels"):
+        Event.model_validate({**common, "payload": nested})
+
+
 def test_agent_action_contains_safe_audit_fields() -> None:
     rescue_id = uuid4()
     action = AgentAction(
