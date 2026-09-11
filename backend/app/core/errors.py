@@ -35,6 +35,15 @@ class UnsupportedEvent(RelayError):
         )
 
 
+class InvalidEventPayload(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "invalid_event_payload",
+            "The event payload does not match the required schema.",
+            status_code=422,
+        )
+
+
 class EventStateConflict(RelayError):
     def __init__(self) -> None:
         super().__init__(

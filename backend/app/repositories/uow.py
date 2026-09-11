@@ -8,6 +8,7 @@ from app.core.errors import ConcurrentModification
 from app.repositories.sqlalchemy import (
     SqlAlchemyAgentActionRepository,
     SqlAlchemyEventRepository,
+    SqlAlchemyOrganizationRepository,
     SqlAlchemyRescueRepository,
     SqlAlchemyToolExecutionRepository,
 )
@@ -24,6 +25,7 @@ class SqlAlchemyUnitOfWork:
     async def __aenter__(self) -> Self:
         self._session = self._session_factory()
         self._committed = False
+        self.organizations = SqlAlchemyOrganizationRepository(self._session)
         self.rescues = SqlAlchemyRescueRepository(self._session)
         self.events = SqlAlchemyEventRepository(self._session)
         self.agent_actions = SqlAlchemyAgentActionRepository(self._session)

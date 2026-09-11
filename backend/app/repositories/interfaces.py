@@ -5,7 +5,7 @@ from uuid import UUID
 
 from app.domain.audit import AgentAction, ToolExecution
 from app.domain.enums import RescueStatus
-from app.domain.events import Event
+from app.domain.events import Event, EventOutcome
 from app.domain.rescue import Rescue
 
 
@@ -21,12 +21,20 @@ class RescueRepository(Protocol):
     async def lock_for_update(self, rescue_id: UUID) -> Rescue | None: ...
 
 
+class OrganizationRepository(Protocol):
+    async def exists(self, organization_id: UUID) -> bool: ...
+
+
 class EventRepository(Protocol):
     async def get_by_idempotency_key(self, key: str) -> Event | None: ...
 
     async def append(self, event: Event) -> Event: ...
 
     async def list_for_rescue(self, rescue_id: UUID) -> Sequence[Event]: ...
+
+    async def set_outcome(self, event_id: UUID, outcome: EventOutcome) -> None: ...
+
+    async def get_outcome(self, event_id: UUID) -> EventOutcome | None: ...
 
 
 class AgentActionRepository(Protocol):
@@ -44,10 +52,20 @@ class ToolExecutionRepository(Protocol):
 
 
 class UnitOfWork(Protocol):
-    rescues: RescueRepository
-    events: EventRepository
-    agent_actions: AgentActionRepository
-    tool_executions: ToolExecutionRepository
+    @property
+    def organizations(self) -> OrganizationRepository: ...
+
+    @property
+    def rescues(self) -> RescueRepository: ...
+
+    @property
+    def events(self) -> EventRepository: ...
+
+    @property
+    def agent_actions(self) -> AgentActionRepository: ...
+
+    @property
+    def tool_executions(self) -> ToolExecutionRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

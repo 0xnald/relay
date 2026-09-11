@@ -46,6 +46,9 @@ class EventRecord(UUIDPrimaryKeyMixin, Base):
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
     trace_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    rescue_status_before: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    rescue_status_after: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    actions_created: Mapped[int] = mapped_column(default=0, nullable=False)
 
 
 class AgentActionRecord(UUIDPrimaryKeyMixin, Base):

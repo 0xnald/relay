@@ -8,11 +8,12 @@ from sqlalchemy.orm.exc import StaleDataError
 from app.core.errors import ConcurrentModification, RescueNotFound
 from app.domain.audit import AgentAction, ToolExecution
 from app.domain.enums import ActionAuthority, ActorRole, EventType, RescueStatus
-from app.domain.events import Event
+from app.domain.events import Event, EventOutcome
 from app.domain.rescue import Rescue
 from app.models.foundational import (
     AgentActionRecord,
     EventRecord,
+    OrganizationRecord,
     RescueRecord,
     ToolExecutionRecord,
 )
@@ -135,6 +136,19 @@ class SqlAlchemyRescueRepository:
         return rescue_to_domain(record) if record is not None else None
 
 
+class SqlAlchemyOrganizationRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def exists(self, organization_id: UUID) -> bool:
+        return (
+            await self._session.scalar(
+                select(OrganizationRecord.id).where(OrganizationRecord.id == organization_id)
+            )
+            is not None
+        )
+
+
 class SqlAlchemyEventRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -170,6 +184,31 @@ class SqlAlchemyEventRepository:
             )
         ).all()
         return [event_to_domain(record) for record in records]
+
+    async def set_outcome(self, event_id: UUID, outcome: EventOutcome) -> None:
+        record = await self._session.get(EventRecord, event_id)
+        if record is None:
+            raise ValueError("Cannot record an outcome for a missing event")
+        record.rescue_status_before = (
+            outcome.rescue_status_before.value if outcome.rescue_status_before else None
+        )
+        record.rescue_status_after = outcome.rescue_status_after.value
+        record.actions_created = outcome.actions_created
+        await self._session.flush()
+
+    async def get_outcome(self, event_id: UUID) -> EventOutcome | None:
+        record = await self._session.get(EventRecord, event_id)
+        if record is None or record.rescue_status_after is None:
+            return None
+        return EventOutcome(
+            rescue_status_before=(
+                RescueStatus(record.rescue_status_before)
+                if record.rescue_status_before is not None
+                else None
+            ),
+            rescue_status_after=RescueStatus(record.rescue_status_after),
+            actions_created=record.actions_created,
+        )
 
 
 class SqlAlchemyAgentActionRepository:

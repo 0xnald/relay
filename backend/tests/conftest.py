@@ -10,6 +10,8 @@ from app.main import create_app
 @pytest.fixture
 async def client() -> AsyncIterator[httpx.AsyncClient]:
     settings = Settings(environment="test", database_url="sqlite+aiosqlite:///:memory:")
-    transport = httpx.ASGITransport(app=create_app(settings))
+    application = create_app(settings)
+    transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as test_client:
         yield test_client
+    await application.state.database.dispose()
