@@ -145,7 +145,21 @@ prevent accidental persistence of chain-of-thought content.
 
 ## Future transaction rule
 
-When workflows arrive, one database transaction should persist the accepted input event, validated
-state transition, business change, and audit record. External side effects require an outbox or an
-equivalent durable delivery pattern before production use. Phase 1 deliberately does not introduce
-an event bus or distributed-service boundary.
+Phase 2 implements the transaction boundary through `SqlAlchemyUnitOfWork`. One database transaction
+persists the accepted input event, validated state transition, processing outcome, and action audit.
+Repository protocols prevent application services from exposing raw SQLAlchemy sessions.
+
+The ingestion path locks a rescue row with `SELECT ... FOR UPDATE` before mutation. SQLAlchemy
+optimistic versioning provides a second guard for other writers: each rescue update includes its
+previous version and a stale update raises a typed concurrency error. Event idempotency combines an
+equivalence lookup with the database uniqueness constraint, so racing deliveries cannot duplicate a
+transition or audit record.
+
+HTTP request IDs are validated and propagated to events, processing results, actions, and tool
+executions. Readiness now runs a real database connectivity probe and returns HTTP 503 without
+exposing connection details when PostgreSQL is unavailable.
+
+External side effects will require an outbox or equivalent durable-delivery pattern before
+production use. Phase 2 deliberately does not introduce an event bus or distributed-service
+boundary. See [Transactional event processing](event-processing.md) for the detailed sequence and
+failure guarantees.

@@ -105,19 +105,32 @@ docs/                 architecture and safety decisions
 ## Local development
 
 Prerequisites: Python 3.12, [uv](https://docs.astral.sh/uv/), and PostgreSQL for development or
-production persistence. SQLite is used only for isolated local tests and migration verification.
+production persistence. SQLite is used only for fast isolated tests. The included Compose file pins
+the same PostgreSQL release used in CI.
 
 ```bash
 git clone https://github.com/0xnald/relay.git
 cd relay
 cp .env.example .env
 uv sync --dev
+docker compose up -d postgres
 uv run alembic upgrade head
 uv run uvicorn app.main:app --app-dir backend --reload
 ```
 
 Set `RELAY_DATABASE_URL` in `.env` to a reachable PostgreSQL database before running migrations.
-The API exposes `GET /health` for liveness and `GET /ready` as the dependency-readiness contract.
+The local values in `.env.example` match the Compose service and are development credentials only.
+
+The API exposes:
+
+- `GET /health` for process liveness
+- `GET /ready` for database-backed readiness
+- `POST /api/v1/events` for typed, idempotent event ingestion
+- `GET /api/v1/rescues/{rescue_id}` for rescue state
+- `GET /api/v1/rescues/{rescue_id}/events` for ordered event history
+
+Event requests require an `Idempotency-Key` header. A valid `X-Request-ID` is propagated when
+provided; otherwise Relay generates one.
 
 ## Quality gates
 
@@ -125,7 +138,9 @@ The API exposes `GET /health` for liveness and `GET /ready` as the dependency-re
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
-uv run pytest
+uv run pytest -m "not integration"
+RELAY_TEST_DATABASE_URL=postgresql+asyncpg://relay:relay_local_only@localhost:5432/relay \
+  uv run pytest -m integration
 ```
 
 Run all four with `make check` on systems with Make. GitHub Actions runs the same checks on every
@@ -133,9 +148,13 @@ push and pull request.
 
 ## Phase status and roadmap
 
-Phase 1 establishes the production engineering foundation: typed domain primitives, deterministic
-lifecycle and authority rules, a food-safety gate, auditable action records, API health contracts,
-database migrations, tests, and CI.
+Phase 1 established typed domain primitives, lifecycle and authority rules, food-safety boundaries,
+and the initial API and database foundation.
+
+Phase 2 adds repository and unit-of-work boundaries, persistent versioned rescue transitions,
+idempotent event processing, action and tool authorization, database readiness, minimal event/rescue
+APIs, and real PostgreSQL integration coverage. See
+[Transactional event processing](docs/event-processing.md).
 
 Later phases will add actual Strands Agents SDK orchestration, audited tools and integrations,
 end-to-end rescue workflows, a user interface, and Amazon Bedrock AgentCore deployment. This

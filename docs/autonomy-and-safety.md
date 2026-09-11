@@ -118,3 +118,14 @@ a person. Safety inputs that are missing, unverified, contradictory, expired, or
 constraints stop autonomous progress and produce an escalation signal.
 
 These rules are implemented without an LLM and tested without network access.
+
+## Phase 2 execution boundary
+
+`AuthorizedActionService` now applies this model before any application-owned tool runs. It writes a
+safe audit record for permitted, denied, escalated, and failed attempts. Permitted tool mutations and
+their success records share one unit of work. A tool failure rolls back its mutations before Relay
+writes a separate failure audit containing only an operational code and exception type.
+
+Green records correctly carry no policy reference unless a policy actually authorized the action.
+Successful amber records retain the active policy reference. Denied amber and red attempts preserve
+an applicable policy reference while preventing tool execution.
