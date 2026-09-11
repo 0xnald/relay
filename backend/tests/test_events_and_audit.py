@@ -59,6 +59,8 @@ def test_agent_action_contains_safe_audit_fields() -> None:
         policy_reference="relay-authority-v1",
         trace_id="trace-2",
         timestamp=datetime.now(UTC),
+        permitted=True,
+        decision_reason="Routine action is autonomously permitted.",
         succeeded=True,
     )
     execution = ToolExecution(
@@ -86,6 +88,8 @@ def test_green_audit_records_do_not_require_fake_policy_reference() -> None:
         input_summary="Assigned driver cancelled.",
         authority=ActionAuthority.GREEN,
         trace_id="trace-green",
+        permitted=True,
+        decision_reason="Routine action is autonomously permitted.",
         succeeded=True,
     )
     execution = ToolExecution(
@@ -114,6 +118,8 @@ def test_audit_models_reject_hidden_reasoning_fields() -> None:
                 "authority": ActionAuthority.GREEN,
                 "policy_reference": "relay-authority-v1",
                 "trace_id": "trace-3",
+                "permitted": True,
+                "decision_reason": "Routine action is autonomously permitted.",
                 "succeeded": True,
                 "chain_of_thought": "must never be stored",
             }

@@ -14,6 +14,59 @@ class RelayError(Exception):
         self.status_code = status_code
 
 
+class RescueNotFound(RelayError):
+    def __init__(self) -> None:
+        super().__init__("rescue_not_found", "The requested rescue was not found.", status_code=404)
+
+
+class DuplicateEventConflict(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "duplicate_event_conflict",
+            "The idempotency key was already used for a different event.",
+            status_code=409,
+        )
+
+
+class UnsupportedEvent(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "unsupported_event", "This event type is not supported for processing.", status_code=422
+        )
+
+
+class EventStateConflict(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "event_state_conflict",
+            "The event is not valid for the rescue's current state.",
+            status_code=409,
+        )
+
+
+class ConcurrentModification(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "concurrent_modification",
+            "The rescue changed during processing; retry with fresh state.",
+            status_code=409,
+        )
+
+
+class PolicyDenied(RelayError):
+    def __init__(self) -> None:
+        super().__init__("policy_denied", "Policy does not authorize this action.", status_code=403)
+
+
+class HumanDecisionRequired(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "human_decision_required",
+            "This action requires an explicit human decision.",
+            status_code=409,
+        )
+
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(RelayError)
     async def relay_error_handler(request: Request, exc: RelayError) -> JSONResponse:

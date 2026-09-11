@@ -19,6 +19,8 @@ class AgentAction(Entity):
     policy_reference: str | None = Field(default=None, min_length=1, max_length=255)
     trace_id: str = Field(min_length=1, max_length=100)
     timestamp: AwareDatetime = Field(default_factory=utc_now)
+    permitted: bool
+    decision_reason: str = Field(min_length=1, max_length=1000)
     succeeded: bool
     error_metadata: dict[str, Any] | None = None
 

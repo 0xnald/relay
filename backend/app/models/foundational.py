@@ -25,8 +25,10 @@ class RescueRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     donor_organization_id: Mapped[UUID] = mapped_column(
         ForeignKey("organizations.id"), nullable=False, index=True
     )
+    donation_id: Mapped[UUID | None] = mapped_column(nullable=True, unique=True)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     version: Mapped[int] = mapped_column(default=1, nullable=False)
+    __mapper_args__ = {"version_id_col": version}  # noqa: RUF012
 
 
 class EventRecord(UUIDPrimaryKeyMixin, Base):
@@ -52,6 +54,27 @@ class AgentActionRecord(UUIDPrimaryKeyMixin, Base):
     rescue_id: Mapped[UUID] = mapped_column(ForeignKey("rescues.id"), nullable=False, index=True)
     agent_name: Mapped[str] = mapped_column(String(100), nullable=False)
     action_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    input_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    authority: Mapped[str] = mapped_column(String(20), nullable=False)
+    policy_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    trace_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    permitted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    decision_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    succeeded: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    error_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON_VARIANT, nullable=True)
+
+
+class ToolExecutionRecord(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "tool_executions"
+
+    rescue_id: Mapped[UUID] = mapped_column(ForeignKey("rescues.id"), nullable=False, index=True)
+    agent_action_id: Mapped[UUID] = mapped_column(
+        ForeignKey("agent_actions.id"), nullable=False, index=True
+    )
+    agent_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
     input_summary: Mapped[str] = mapped_column(Text, nullable=False)
     result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     authority: Mapped[str] = mapped_column(String(20), nullable=False)
