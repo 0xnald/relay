@@ -16,7 +16,7 @@ class AgentAction(Entity):
     input_summary: str = Field(min_length=1, max_length=2000)
     result_summary: str | None = Field(default=None, max_length=2000)
     authority: ActionAuthority
-    policy_reference: str = Field(min_length=1, max_length=255)
+    policy_reference: str | None = Field(default=None, min_length=1, max_length=255)
     trace_id: str = Field(min_length=1, max_length=100)
     timestamp: AwareDatetime = Field(default_factory=utc_now)
     succeeded: bool
@@ -31,7 +31,7 @@ class ToolExecution(Entity):
     input_summary: str = Field(min_length=1, max_length=2000)
     result_summary: str | None = Field(default=None, max_length=2000)
     authority: ActionAuthority
-    policy_reference: str = Field(min_length=1, max_length=255)
+    policy_reference: str | None = Field(default=None, min_length=1, max_length=255)
     trace_id: str = Field(min_length=1, max_length=100)
     timestamp: AwareDatetime = Field(default_factory=utc_now)
     succeeded: bool

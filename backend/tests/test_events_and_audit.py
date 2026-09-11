@@ -77,6 +77,32 @@ def test_agent_action_contains_safe_audit_fields() -> None:
     assert execution.succeeded
 
 
+def test_green_audit_records_do_not_require_fake_policy_reference() -> None:
+    rescue_id = uuid4()
+    action = AgentAction(
+        rescue_id=rescue_id,
+        agent_name="coordination-agent",
+        action_name="search_replacement_driver",
+        input_summary="Assigned driver cancelled.",
+        authority=ActionAuthority.GREEN,
+        trace_id="trace-green",
+        succeeded=True,
+    )
+    execution = ToolExecution(
+        rescue_id=rescue_id,
+        agent_action_id=action.id,
+        agent_name=action.agent_name,
+        tool_name="driver_search",
+        input_summary="Search eligible replacement drivers.",
+        authority=ActionAuthority.GREEN,
+        trace_id=action.trace_id,
+        succeeded=True,
+    )
+
+    assert action.policy_reference is None
+    assert execution.policy_reference is None
+
+
 def test_audit_models_reject_hidden_reasoning_fields() -> None:
     with pytest.raises(ValidationError):
         AgentAction.model_validate(

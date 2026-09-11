@@ -55,7 +55,7 @@ class AgentActionRecord(UUIDPrimaryKeyMixin, Base):
     input_summary: Mapped[str] = mapped_column(Text, nullable=False)
     result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     authority: Mapped[str] = mapped_column(String(20), nullable=False)
-    policy_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    policy_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     trace_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     succeeded: Mapped[bool] = mapped_column(Boolean, nullable=False)
