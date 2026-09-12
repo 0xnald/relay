@@ -9,6 +9,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.agents.factory import AgentFactory
+from app.api.agents import router as agents_router
 from app.api.events import router as events_router
 from app.api.health import router as health_router
 from app.core.config import Settings, get_settings
@@ -38,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.settings = active_settings
     application.state.database = database
     application.state.uow_factory = lambda: SqlAlchemyUnitOfWork(database.session_factory)
+    application.state.agent_factory = AgentFactory(active_settings)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=active_settings.cors_origins,
@@ -80,6 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_error_handlers(application)
     application.include_router(health_router)
     application.include_router(events_router)
+    application.include_router(agents_router)
     return application
 
 

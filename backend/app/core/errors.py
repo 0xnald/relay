@@ -76,6 +76,15 @@ class HumanDecisionRequired(RelayError):
         )
 
 
+class AgentInterpretationFailure(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "agent_interpretation_failure",
+            "The agent could not produce a valid structured interpretation.",
+            status_code=422,
+        )
+
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(RelayError)
     async def relay_error_handler(request: Request, exc: RelayError) -> JSONResponse:
