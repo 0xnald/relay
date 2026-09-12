@@ -86,3 +86,35 @@ class ToolExecutionRecord(UUIDPrimaryKeyMixin, Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     succeeded: Mapped[bool] = mapped_column(Boolean, nullable=False)
     error_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON_VARIANT, nullable=True)
+
+
+class AgentInvocationRecord(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "agent_invocations"
+
+    rescue_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("rescues.id"), nullable=True, index=True
+    )
+    agent_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    invocation_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    tool_names: Mapped[list[str]] = mapped_column(JSON_VARIANT, nullable=False)
+    action_proposed: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    result_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    latency_ms: Mapped[float] = mapped_column(nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CommunicationRequestRecord(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "communication_requests"
+
+    rescue_id: Mapped[UUID] = mapped_column(ForeignKey("rescues.id"), nullable=False, index=True)
+    target: Mapped[str] = mapped_column(String(100), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

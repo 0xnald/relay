@@ -122,3 +122,13 @@ class NotificationStatus(StrEnum):
     PENDING = "pending"
     SENT = "sent"
     FAILED = "failed"
+
+
+class CommunicationRequestStatus(StrEnum):
+    QUEUED = "queued"
+    PENDING_DELIVERY = "pending_delivery"
+
+
+class AgentInvocationStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"

@@ -6,12 +6,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.core.errors import ConcurrentModification, RescueNotFound
+from app.domain.agents import AgentInvocation, CommunicationRequest
 from app.domain.audit import AgentAction, ToolExecution
-from app.domain.enums import ActionAuthority, ActorRole, EventType, RescueStatus
+from app.domain.enums import (
+    ActionAuthority,
+    ActorRole,
+    AgentInvocationStatus,
+    CommunicationRequestStatus,
+    EventType,
+    RescueStatus,
+)
 from app.domain.events import Event, EventOutcome
 from app.domain.rescue import Rescue
 from app.models.foundational import (
     AgentActionRecord,
+    AgentInvocationRecord,
+    CommunicationRequestRecord,
     EventRecord,
     OrganizationRecord,
     RescueRecord,
@@ -87,6 +97,40 @@ def tool_execution_to_domain(record: ToolExecutionRecord) -> ToolExecution:
         timestamp=_utc(record.occurred_at),
         succeeded=record.succeeded,
         error_metadata=record.error_metadata,
+    )
+
+
+def agent_invocation_to_domain(record: AgentInvocationRecord) -> AgentInvocation:
+    return AgentInvocation(
+        id=record.id,
+        rescue_id=record.rescue_id,
+        agent_name=record.agent_name,
+        invocation_type=record.invocation_type,
+        prompt_version=record.prompt_version,
+        model_provider=record.model_provider,
+        model_id=record.model_id,
+        trace_id=record.trace_id,
+        status=AgentInvocationStatus(record.status),
+        tool_names=tuple(record.tool_names),
+        action_proposed=record.action_proposed,
+        result_summary=record.result_summary,
+        latency_ms=record.latency_ms,
+        timestamp=_utc(record.occurred_at),
+    )
+
+
+def communication_request_to_domain(
+    record: CommunicationRequestRecord,
+) -> CommunicationRequest:
+    return CommunicationRequest(
+        id=record.id,
+        rescue_id=record.rescue_id,
+        target=record.target,
+        question=record.question,
+        reason=record.reason,
+        trace_id=record.trace_id,
+        status=CommunicationRequestStatus(record.status),
+        timestamp=_utc(record.occurred_at),
     )
 
 
@@ -290,3 +334,72 @@ class SqlAlchemyToolExecutionRepository:
             )
         ).all()
         return [tool_execution_to_domain(record) for record in records]
+
+
+class SqlAlchemyAgentInvocationRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def append(self, invocation: AgentInvocation) -> AgentInvocation:
+        record = AgentInvocationRecord(
+            id=invocation.id,
+            rescue_id=invocation.rescue_id,
+            agent_name=invocation.agent_name,
+            invocation_type=invocation.invocation_type,
+            prompt_version=invocation.prompt_version,
+            model_provider=invocation.model_provider,
+            model_id=invocation.model_id,
+            trace_id=invocation.trace_id,
+            status=invocation.status.value,
+            tool_names=list(invocation.tool_names),
+            action_proposed=invocation.action_proposed,
+            result_summary=invocation.result_summary,
+            latency_ms=invocation.latency_ms,
+            occurred_at=invocation.timestamp,
+        )
+        self._session.add(record)
+        await self._session.flush()
+        return agent_invocation_to_domain(record)
+
+    async def list_for_rescue(self, rescue_id: UUID) -> list[AgentInvocation]:
+        records = (
+            await self._session.scalars(
+                select(AgentInvocationRecord)
+                .where(AgentInvocationRecord.rescue_id == rescue_id)
+                .order_by(AgentInvocationRecord.occurred_at, AgentInvocationRecord.id)
+            )
+        ).all()
+        return [agent_invocation_to_domain(record) for record in records]
+
+
+class SqlAlchemyCommunicationRequestRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def append(self, request: CommunicationRequest) -> CommunicationRequest:
+        record = CommunicationRequestRecord(
+            id=request.id,
+            rescue_id=request.rescue_id,
+            target=request.target,
+            question=request.question,
+            reason=request.reason,
+            trace_id=request.trace_id,
+            status=request.status.value,
+            occurred_at=request.timestamp,
+        )
+        self._session.add(record)
+        await self._session.flush()
+        return communication_request_to_domain(record)
+
+    async def list_for_rescue(self, rescue_id: UUID) -> list[CommunicationRequest]:
+        records = (
+            await self._session.scalars(
+                select(CommunicationRequestRecord)
+                .where(CommunicationRequestRecord.rescue_id == rescue_id)
+                .order_by(
+                    CommunicationRequestRecord.occurred_at,
+                    CommunicationRequestRecord.id,
+                )
+            )
+        ).all()
+        return [communication_request_to_domain(record) for record in records]

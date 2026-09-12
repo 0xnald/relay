@@ -7,6 +7,8 @@ from sqlalchemy.orm.exc import StaleDataError
 from app.core.errors import ConcurrentModification
 from app.repositories.sqlalchemy import (
     SqlAlchemyAgentActionRepository,
+    SqlAlchemyAgentInvocationRepository,
+    SqlAlchemyCommunicationRequestRepository,
     SqlAlchemyEventRepository,
     SqlAlchemyOrganizationRepository,
     SqlAlchemyRescueRepository,
@@ -30,6 +32,8 @@ class SqlAlchemyUnitOfWork:
         self.events = SqlAlchemyEventRepository(self._session)
         self.agent_actions = SqlAlchemyAgentActionRepository(self._session)
         self.tool_executions = SqlAlchemyToolExecutionRepository(self._session)
+        self.agent_invocations = SqlAlchemyAgentInvocationRepository(self._session)
+        self.communication_requests = SqlAlchemyCommunicationRequestRepository(self._session)
         return self
 
     async def __aexit__(

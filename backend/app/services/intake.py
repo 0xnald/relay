@@ -1,17 +1,23 @@
 import re
+import time
 from typing import Any
 
 from pydantic import ValidationError
 from strands.types.exceptions import StructuredOutputException
 
 from app.agents.factory import AgentFactory
+from app.agents.prompts import INTAKE_PROMPT_VERSION
 from app.core.errors import AgentInterpretationFailure
+from app.domain.agents import AgentInvocation
+from app.domain.enums import AgentInvocationStatus
+from app.observability.agents import InMemoryAgentTelemetry
 from app.schemas.intake import (
     DonationIntakeResult,
     IntakeAgentResponse,
     IntakeCompletenessResult,
     IntakeCompletenessStatus,
 )
+from app.services.agent_audit import AgentInvocationAuditService
 
 AUTHORITATIVE_SAFETY_PATTERN = re.compile(
     r"\b(food|it|this|chicken|meal|donation)\s+is\s+(safe|unsafe|approved for consumption)\b",
@@ -69,9 +75,11 @@ class IntakeAgentService:
         self,
         agent_factory: AgentFactory,
         evaluator: IntakeCompletenessEvaluator | None = None,
+        audit_service: AgentInvocationAuditService | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._evaluator = evaluator or IntakeCompletenessEvaluator()
+        self._audit_service = audit_service
 
     async def interpret(
         self,
@@ -83,7 +91,9 @@ class IntakeAgentService:
     ) -> IntakeAgentResponse:
         if not source_text.strip():
             raise AgentInterpretationFailure()
-        agent = self._agent_factory.create_intake_agent(DonationIntakeResult)
+        started = time.perf_counter()
+        telemetry = InMemoryAgentTelemetry()
+        agent = self._agent_factory.create_intake_agent(DonationIntakeResult, telemetry=telemetry)
         prompt = self._prompt(source_text, organization_context)
         try:
             result = await agent.invoke_async(
@@ -100,11 +110,48 @@ class IntakeAgentService:
             interpretation = interpretation.model_copy(update={"source_text": source_text})
             self._reject_safety_determination(interpretation)
         except (StructuredOutputException, ValidationError, ValueError, TypeError) as exc:
+            await self._record_audit(
+                trace_id=trace_id,
+                status=AgentInvocationStatus.FAILED,
+                result_summary="Structured intake interpretation failed validation.",
+                latency_ms=(time.perf_counter() - started) * 1000,
+            )
             raise AgentInterpretationFailure() from exc
+        completeness = self._evaluator.evaluate(interpretation)
+        await self._record_audit(
+            trace_id=trace_id,
+            status=AgentInvocationStatus.SUCCEEDED,
+            result_summary=f"Intake completeness: {completeness.status.value}.",
+            latency_ms=(time.perf_counter() - started) * 1000,
+        )
         return IntakeAgentResponse(
             interpretation=interpretation,
-            completeness=self._evaluator.evaluate(interpretation),
+            completeness=completeness,
             trace_id=trace_id,
+        )
+
+    async def _record_audit(
+        self,
+        *,
+        trace_id: str,
+        status: AgentInvocationStatus,
+        result_summary: str,
+        latency_ms: float,
+    ) -> None:
+        if self._audit_service is None:
+            return
+        await self._audit_service.record(
+            AgentInvocation(
+                agent_name="relay-intake",
+                invocation_type="donation_intake",
+                prompt_version=INTAKE_PROMPT_VERSION,
+                model_provider=self._agent_factory.model_provider,
+                model_id=self._agent_factory.model_id,
+                trace_id=trace_id,
+                status=status,
+                result_summary=result_summary,
+                latency_ms=latency_ms,
+            )
         )
 
     @staticmethod

@@ -3,6 +3,7 @@ from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
+from app.domain.agents import AgentInvocation, CommunicationRequest
 from app.domain.audit import AgentAction, ToolExecution
 from app.domain.enums import RescueStatus
 from app.domain.events import Event, EventOutcome
@@ -51,6 +52,18 @@ class ToolExecutionRepository(Protocol):
     async def list_for_rescue(self, rescue_id: UUID) -> Sequence[ToolExecution]: ...
 
 
+class AgentInvocationRepository(Protocol):
+    async def append(self, invocation: AgentInvocation) -> AgentInvocation: ...
+
+    async def list_for_rescue(self, rescue_id: UUID) -> Sequence[AgentInvocation]: ...
+
+
+class CommunicationRequestRepository(Protocol):
+    async def append(self, request: CommunicationRequest) -> CommunicationRequest: ...
+
+    async def list_for_rescue(self, rescue_id: UUID) -> Sequence[CommunicationRequest]: ...
+
+
 class UnitOfWork(Protocol):
     @property
     def organizations(self) -> OrganizationRepository: ...
@@ -66,6 +79,12 @@ class UnitOfWork(Protocol):
 
     @property
     def tool_executions(self) -> ToolExecutionRepository: ...
+
+    @property
+    def agent_invocations(self) -> AgentInvocationRepository: ...
+
+    @property
+    def communication_requests(self) -> CommunicationRequestRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

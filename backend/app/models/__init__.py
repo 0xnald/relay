@@ -3,6 +3,8 @@
 from app.models.base import Base
 from app.models.foundational import (
     AgentActionRecord,
+    AgentInvocationRecord,
+    CommunicationRequestRecord,
     EventRecord,
     OrganizationRecord,
     RescueRecord,
@@ -11,7 +13,9 @@ from app.models.foundational import (
 
 __all__ = [
     "AgentActionRecord",
+    "AgentInvocationRecord",
     "Base",
+    "CommunicationRequestRecord",
     "EventRecord",
     "OrganizationRecord",
     "RescueRecord",

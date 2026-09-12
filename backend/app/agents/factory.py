@@ -22,22 +22,36 @@ class AgentFactory:
         self._model = model
         self._telemetry = telemetry
 
+    @property
+    def model_provider(self) -> str:
+        return self._settings.agent_model_provider
+
+    @property
+    def model_id(self) -> str:
+        return self._settings.agent_model_id
+
     def _model_for_agent(self) -> Model:
         return self._model or create_agent_model(self._settings)
 
-    def create_intake_agent(self, output_model: type[BaseModel]) -> Agent:
+    def create_intake_agent(
+        self, output_model: type[BaseModel], *, telemetry: AgentTelemetry | None = None
+    ) -> Agent:
         return Agent(
             model=self._model_for_agent(),
             name="relay-intake",
             description="Extracts structured donation intake facts.",
             system_prompt=INTAKE_PROMPT,
             structured_output_model=output_model,
-            hooks=[SafeAgentHooks(self._telemetry)],
+            hooks=[SafeAgentHooks(telemetry or self._telemetry)],
             callback_handler=None,
         )
 
     def create_coordination_agent(
-        self, *, tools: Sequence[object], output_model: type[BaseModel]
+        self,
+        *,
+        tools: Sequence[object],
+        output_model: type[BaseModel],
+        telemetry: AgentTelemetry | None = None,
     ) -> Agent:
         return Agent(
             model=self._model_for_agent(),
@@ -46,6 +60,6 @@ class AgentFactory:
             system_prompt=COORDINATION_PROMPT,
             tools=list(tools),
             structured_output_model=output_model,
-            hooks=[SafeAgentHooks(self._telemetry)],
+            hooks=[SafeAgentHooks(telemetry or self._telemetry)],
             callback_handler=None,
         )
