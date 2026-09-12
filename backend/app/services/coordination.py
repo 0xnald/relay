@@ -3,9 +3,6 @@ import time
 from typing import Any
 from uuid import UUID
 
-from pydantic import ValidationError
-from strands.types.exceptions import StructuredOutputException
-
 from app.agents.factory import AgentFactory
 from app.agents.prompts import COORDINATION_PROMPT_VERSION
 from app.core.errors import AgentInterpretationFailure
@@ -76,7 +73,7 @@ class CoordinationAgentService:
             raw: Any = result.structured_output
             proposal = CoordinationProposal.model_validate(raw)
             self._validate_communication(proposal.communication_draft)
-        except (StructuredOutputException, ValidationError, ValueError, TypeError) as exc:
+        except Exception as exc:
             await self._record_audit(
                 rescue_id=rescue_id,
                 trace_id=trace_id,
@@ -89,31 +86,43 @@ class CoordinationAgentService:
 
         action_result = None
         clarification_result = None
-        if proposal.kind in {
-            CoordinationProposalKind.ACTION,
-            CoordinationProposalKind.ESCALATION,
-        }:
-            if proposal.action_type is None:
-                raise AgentInterpretationFailure()
-            action_result = await self._tool_service.propose_action(
+        try:
+            if proposal.kind in {
+                CoordinationProposalKind.ACTION,
+                CoordinationProposalKind.ESCALATION,
+            }:
+                if proposal.action_type is None:
+                    raise AgentInterpretationFailure()
+                action_result = await self._tool_service.propose_action(
+                    rescue_id=rescue_id,
+                    action=proposal.action_type,
+                    operational_reason=proposal.operational_reason,
+                    structured_inputs=proposal.structured_inputs,
+                    trace_id=trace_id,
+                    agent_name="relay-coordination",
+                    policy=policy,
+                )
+            elif proposal.kind is CoordinationProposalKind.CLARIFICATION:
+                if proposal.clarification_target is None or proposal.clarification_question is None:
+                    raise AgentInterpretationFailure()
+                clarification_result = await self._tool_service.request_information(
+                    rescue_id=rescue_id,
+                    target=proposal.clarification_target,
+                    question=proposal.clarification_question,
+                    reason=proposal.operational_reason,
+                    trace_id=trace_id,
+                )
+        except Exception:
+            await self._record_audit(
                 rescue_id=rescue_id,
-                action=proposal.action_type,
-                operational_reason=proposal.operational_reason,
-                structured_inputs=proposal.structured_inputs,
                 trace_id=trace_id,
-                agent_name="relay-coordination",
-                policy=policy,
+                status=AgentInvocationStatus.FAILED,
+                result_summary="Coordination proposal could not pass the application boundary.",
+                latency_ms=(time.perf_counter() - started) * 1000,
+                telemetry=telemetry,
+                action_proposed=proposal.action_type.value if proposal.action_type else None,
             )
-        elif proposal.kind is CoordinationProposalKind.CLARIFICATION:
-            if proposal.clarification_target is None or proposal.clarification_question is None:
-                raise AgentInterpretationFailure()
-            clarification_result = await self._tool_service.request_information(
-                rescue_id=rescue_id,
-                target=proposal.clarification_target,
-                question=proposal.clarification_question,
-                reason=proposal.operational_reason,
-                trace_id=trace_id,
-            )
+            raise
         await self._record_audit(
             rescue_id=rescue_id,
             trace_id=trace_id,

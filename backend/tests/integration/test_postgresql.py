@@ -13,12 +13,21 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import get_settings
 from app.core.errors import EventStateConflict
-from app.domain.enums import ActorRole, EventType, OrganizationType, RescueStatus
+from app.domain.agents import AgentInvocation
+from app.domain.enums import (
+    ActorRole,
+    AgentInvocationStatus,
+    EventType,
+    OrganizationType,
+    RescueStatus,
+)
 from app.domain.events import Event
 from app.domain.rescue import Rescue
 from app.models.foundational import EventRecord, OrganizationRecord, RescueRecord
 from app.repositories.sqlalchemy import SqlAlchemyAgentActionRepository
 from app.repositories.uow import SqlAlchemyUnitOfWork
+from app.services.agent_audit import AgentInvocationAuditService
+from app.services.communications import CommunicationRequestService
 from app.services.event_processing import EventIngestionService, EventProcessingResult
 
 pytestmark = pytest.mark.integration
@@ -49,8 +58,8 @@ async def pg_factory(postgres_url: str) -> AsyncIterator[async_sessionmaker[Asyn
     async with engine.begin() as connection:
         await connection.execute(
             text(
-                "TRUNCATE TABLE tool_executions, agent_actions, events, rescues, "
-                "organizations CASCADE"
+                "TRUNCATE TABLE communication_requests, agent_invocations, tool_executions, "
+                "agent_actions, events, rescues, organizations CASCADE"
             )
         )
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -103,17 +112,62 @@ async def test_migrations_reach_head_and_use_native_postgresql_types(
                     "FROM information_schema.columns "
                     "WHERE (table_name = 'events' "
                     "AND column_name IN ('id', 'payload', 'created_at')) "
-                    "OR (table_name = 'rescues' AND column_name = 'id')"
+                    "OR (table_name = 'rescues' AND column_name = 'id') "
+                    "OR (table_name = 'agent_invocations' AND column_name = 'tool_names')"
                 )
             )
         ).all()
     types = {(row.table_name, row.column_name): (row.data_type, row.udt_name) for row in rows}
 
-    assert revision == "20260911_0005"
+    assert revision == "20260912_0006"
     assert types[("events", "id")][1] == "uuid"
     assert types[("rescues", "id")][1] == "uuid"
     assert types[("events", "payload")][1] == "jsonb"
+    assert types[("agent_invocations", "tool_names")][1] == "jsonb"
     assert types[("events", "created_at")][0] == "timestamp with time zone"
+
+
+async def test_agent_audit_and_communication_requests_round_trip(
+    pg_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    rescue = await seed_rescue(pg_factory, RescueStatus.MATCHING)
+
+    def uow() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(pg_factory)
+
+    clarification = await CommunicationRequestService(uow).queue(
+        rescue.id,
+        "donor",
+        "What is the latest pickup time?",
+        "Pickup deadline is missing.",
+        "trace-agent-postgres",
+    )
+    await AgentInvocationAuditService(uow).record(
+        AgentInvocation(
+            rescue_id=rescue.id,
+            agent_name="relay-coordination",
+            invocation_type="rescue_coordination",
+            prompt_version="coordination-v1",
+            model_provider="bedrock",
+            model_id="global.anthropic.claude-sonnet-4-6",
+            trace_id="trace-agent-postgres",
+            status=AgentInvocationStatus.SUCCEEDED,
+            tool_names=("get_rescue", "request_information"),
+            action_proposed=None,
+            result_summary="Coordination proposal: clarification.",
+            latency_ms=12.5,
+        )
+    )
+
+    async with uow() as work:
+        requests = await work.communication_requests.list_for_rescue(rescue.id)
+        invocations = await work.agent_invocations.list_for_rescue(rescue.id)
+
+    assert clarification.status == "queued"
+    assert not clarification.delivery_claimed
+    assert requests[0].trace_id == "trace-agent-postgres"
+    assert invocations[0].tool_names == ("get_rescue", "request_information")
+    assert invocations[0].status is AgentInvocationStatus.SUCCEEDED
 
 
 async def test_foreign_key_and_idempotency_constraints_are_enforced(

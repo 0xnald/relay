@@ -2,9 +2,6 @@ import re
 import time
 from typing import Any
 
-from pydantic import ValidationError
-from strands.types.exceptions import StructuredOutputException
-
 from app.agents.factory import AgentFactory
 from app.agents.prompts import INTAKE_PROMPT_VERSION
 from app.core.errors import AgentInterpretationFailure
@@ -109,7 +106,7 @@ class IntakeAgentService:
             interpretation = DonationIntakeResult.model_validate(raw)
             interpretation = interpretation.model_copy(update={"source_text": source_text})
             self._reject_safety_determination(interpretation)
-        except (StructuredOutputException, ValidationError, ValueError, TypeError) as exc:
+        except Exception as exc:
             await self._record_audit(
                 trace_id=trace_id,
                 status=AgentInvocationStatus.FAILED,

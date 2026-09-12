@@ -14,10 +14,10 @@ from app.services.coordination import CoordinationAgentService
 from app.services.event_processing import UnitOfWorkFactory
 from app.services.intake import IntakeAgentService
 
-router = APIRouter(prefix="/api/v1/agent", tags=["agent interpretation"])
+router = APIRouter(prefix="/api/v1", tags=["agent interpretation"])
 
 
-@router.post("/intake", response_model=IntakeAgentResponse)
+@router.post("/agent/intake", response_model=IntakeAgentResponse)
 async def interpret_intake(body: IntakeAgentRequest, request: Request) -> IntakeAgentResponse:
     factory = cast(AgentFactory, request.app.state.agent_factory)
     unit_of_work = cast(UnitOfWorkFactory, request.app.state.uow_factory)
