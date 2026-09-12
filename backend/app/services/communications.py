@@ -2,6 +2,7 @@ from uuid import UUID
 
 from app.core.errors import RescueNotFound
 from app.domain.agents import CommunicationRequest
+from app.domain.network import OutboxMessage
 from app.services.agent_tools import ClarificationResult
 from app.services.event_processing import UnitOfWorkFactory
 
@@ -29,6 +30,15 @@ class CommunicationRequestService:
             if await uow.rescues.get(rescue_id) is None:
                 raise RescueNotFound()
             persisted = await uow.communication_requests.append(request)
+            await uow.outbox.append(
+                OutboxMessage(
+                    aggregate_type="rescue",
+                    aggregate_id=rescue_id,
+                    message_type="clarification_requested",
+                    payload={"communication_request_id": str(persisted.id), "target": target},
+                    trace_id=trace_id,
+                )
+            )
             await uow.commit()
         return ClarificationResult(
             request_id=persisted.id,

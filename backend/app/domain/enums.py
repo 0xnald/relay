@@ -44,6 +44,13 @@ class EventType(StrEnum):
     POLICY_VIOLATION = "policy_violation"
     MISSING_INFORMATION = "missing_information"
     HUMAN_DECISION_RECEIVED = "human_decision_received"
+    WORKFLOW_ADVANCED = "workflow_advanced"
+    RECIPIENT_CAPABILITY_LOST = "recipient_capability_lost"
+    RECOVERY_STARTED = "recovery_started"
+    RECOVERY_COMPLETED = "recovery_completed"
+    RECIPIENT_RECOVERY_RESUMED = "recipient_recovery_resumed"
+    DRIVER_RECOVERY_RESUMED = "driver_recovery_resumed"
+    WORKFLOW_RESUMED = "workflow_resumed"
 
 
 class DecisionStatus(StrEnum):

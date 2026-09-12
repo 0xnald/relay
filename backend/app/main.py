@@ -13,10 +13,12 @@ from app.agents.factory import AgentFactory
 from app.api.agents import router as agents_router
 from app.api.events import router as events_router
 from app.api.health import router as health_router
+from app.api.network import router as network_router
 from app.core.config import Settings, get_settings
 from app.core.errors import install_error_handlers
 from app.core.logging import configure_logging
 from app.repositories.database import Database
+from app.repositories.network import NetworkStore
 from app.repositories.uow import SqlAlchemyUnitOfWork
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.database = database
     application.state.uow_factory = lambda: SqlAlchemyUnitOfWork(database.session_factory)
     application.state.agent_factory = AgentFactory(active_settings)
+    application.state.network_store = NetworkStore(database.session_factory)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=active_settings.cors_origins,
@@ -84,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(health_router)
     application.include_router(events_router)
     application.include_router(agents_router)
+    application.include_router(network_router)
     return application
 
 

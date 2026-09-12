@@ -11,6 +11,7 @@ from app.repositories.sqlalchemy import (
     SqlAlchemyCommunicationRequestRepository,
     SqlAlchemyEventRepository,
     SqlAlchemyOrganizationRepository,
+    SqlAlchemyOutboxRepository,
     SqlAlchemyRescueRepository,
     SqlAlchemyToolExecutionRepository,
 )
@@ -34,6 +35,7 @@ class SqlAlchemyUnitOfWork:
         self.tool_executions = SqlAlchemyToolExecutionRepository(self._session)
         self.agent_invocations = SqlAlchemyAgentInvocationRepository(self._session)
         self.communication_requests = SqlAlchemyCommunicationRequestRepository(self._session)
+        self.outbox = SqlAlchemyOutboxRepository(self._session)
         return self
 
     async def __aexit__(

@@ -7,6 +7,7 @@ from app.domain.agents import AgentInvocation, CommunicationRequest
 from app.domain.audit import AgentAction, ToolExecution
 from app.domain.enums import RescueStatus
 from app.domain.events import Event, EventOutcome
+from app.domain.network import OutboxMessage
 from app.domain.rescue import Rescue
 
 
@@ -64,6 +65,10 @@ class CommunicationRequestRepository(Protocol):
     async def list_for_rescue(self, rescue_id: UUID) -> Sequence[CommunicationRequest]: ...
 
 
+class OutboxRepository(Protocol):
+    async def append(self, message: OutboxMessage) -> OutboxMessage: ...
+
+
 class UnitOfWork(Protocol):
     @property
     def organizations(self) -> OrganizationRepository: ...
@@ -85,6 +90,9 @@ class UnitOfWork(Protocol):
 
     @property
     def communication_requests(self) -> CommunicationRequestRepository: ...
+
+    @property
+    def outbox(self) -> OutboxRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

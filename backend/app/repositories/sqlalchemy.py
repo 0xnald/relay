@@ -17,6 +17,7 @@ from app.domain.enums import (
     RescueStatus,
 )
 from app.domain.events import Event, EventOutcome
+from app.domain.network import OutboxMessage
 from app.domain.rescue import Rescue
 from app.models.foundational import (
     AgentActionRecord,
@@ -27,6 +28,7 @@ from app.models.foundational import (
     RescueRecord,
     ToolExecutionRecord,
 )
+from app.models.network import OutboxMessageRecord
 from app.services.state_machine import transition
 
 
@@ -403,3 +405,29 @@ class SqlAlchemyCommunicationRequestRepository:
             )
         ).all()
         return [communication_request_to_domain(record) for record in records]
+
+
+class SqlAlchemyOutboxRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def append(self, message: OutboxMessage) -> OutboxMessage:
+        self._session.add(
+            OutboxMessageRecord(
+                id=message.id,
+                aggregate_type=message.aggregate_type,
+                aggregate_id=message.aggregate_id,
+                message_type=message.message_type,
+                payload=message.payload,
+                status=message.status.value,
+                attempt_count=message.attempt_count,
+                available_at=message.available_at,
+                delivered_at=message.delivered_at,
+                last_error=message.last_error,
+                trace_id=message.trace_id,
+                created_at=message.created_at,
+                updated_at=message.updated_at,
+            )
+        )
+        await self._session.flush()
+        return message

@@ -42,6 +42,16 @@ class EventProcessingResult(DomainModel):
 
 
 EVENT_TRANSITIONS: dict[EventType, dict[RescueStatus, RescueStatus]] = {
+    EventType.WORKFLOW_ADVANCED: {
+        RescueStatus.RECEIVED: RescueStatus.NORMALIZING,
+        RescueStatus.NORMALIZING: RescueStatus.POLICY_CHECK,
+        RescueStatus.POLICY_CHECK: RescueStatus.MATCHING,
+        RescueStatus.MATCHING: RescueStatus.AWAITING_RECIPIENT,
+        RescueStatus.ASSIGNED: RescueStatus.AWAITING_DRIVER,
+        RescueStatus.DISPATCHED: RescueStatus.PICKUP_PENDING,
+        RescueStatus.IN_TRANSIT: RescueStatus.DELIVERY_PENDING,
+        RescueStatus.VERIFYING: RescueStatus.COMPLETED,
+    },
     EventType.RECIPIENT_ACCEPTED: {
         RescueStatus.AWAITING_RECIPIENT: RescueStatus.ASSIGNED,
     },
@@ -56,6 +66,34 @@ EVENT_TRANSITIONS: dict[EventType, dict[RescueStatus, RescueStatus]] = {
         RescueStatus.AWAITING_DRIVER: RescueStatus.EXCEPTION_DETECTED,
         RescueStatus.DISPATCHED: RescueStatus.EXCEPTION_DETECTED,
         RescueStatus.PICKUP_PENDING: RescueStatus.EXCEPTION_DETECTED,
+    },
+    EventType.RECIPIENT_CAPABILITY_LOST: {
+        RescueStatus.ASSIGNED: RescueStatus.EXCEPTION_DETECTED,
+        RescueStatus.AWAITING_DRIVER: RescueStatus.EXCEPTION_DETECTED,
+        RescueStatus.DISPATCHED: RescueStatus.EXCEPTION_DETECTED,
+        RescueStatus.PICKUP_PENDING: RescueStatus.EXCEPTION_DETECTED,
+    },
+    EventType.MISSING_INFORMATION: {
+        RescueStatus.POLICY_CHECK: RescueStatus.HUMAN_REVIEW,
+        RescueStatus.EXCEPTION_DETECTED: RescueStatus.HUMAN_REVIEW,
+        RescueStatus.RECOVERY_PLANNING: RescueStatus.HUMAN_REVIEW,
+        RescueStatus.PICKUP_PENDING: RescueStatus.HUMAN_REVIEW,
+        RescueStatus.VERIFYING: RescueStatus.HUMAN_REVIEW,
+    },
+    EventType.RECOVERY_STARTED: {
+        RescueStatus.EXCEPTION_DETECTED: RescueStatus.RECOVERY_PLANNING,
+    },
+    EventType.RECOVERY_COMPLETED: {
+        RescueStatus.RECOVERY_PLANNING: RescueStatus.RECOVERED,
+    },
+    EventType.RECIPIENT_RECOVERY_RESUMED: {
+        RescueStatus.RECOVERED: RescueStatus.PICKUP_PENDING,
+    },
+    EventType.DRIVER_RECOVERY_RESUMED: {
+        RescueStatus.RECOVERED: RescueStatus.PICKUP_PENDING,
+    },
+    EventType.WORKFLOW_RESUMED: {
+        RescueStatus.RESOLVED: RescueStatus.PICKUP_PENDING,
     },
     EventType.PICKUP_CONFIRMED: {
         RescueStatus.PICKUP_PENDING: RescueStatus.IN_TRANSIT,
