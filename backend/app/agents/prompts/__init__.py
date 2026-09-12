@@ -1,9 +1,12 @@
 from app.agents.prompts.coordination import COORDINATION_PROMPT, COORDINATION_PROMPT_VERSION
+from app.agents.prompts.exception import EXCEPTION_PROMPT, EXCEPTION_PROMPT_VERSION
 from app.agents.prompts.intake import INTAKE_PROMPT, INTAKE_PROMPT_VERSION
 
 __all__ = [
     "COORDINATION_PROMPT",
     "COORDINATION_PROMPT_VERSION",
+    "EXCEPTION_PROMPT",
+    "EXCEPTION_PROMPT_VERSION",
     "INTAKE_PROMPT",
     "INTAKE_PROMPT_VERSION",
 ]
