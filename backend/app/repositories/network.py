@@ -371,6 +371,73 @@ class NetworkStore:
             result = allocation_domain(allocation)
         return result
 
+    async def reassign_allocation(
+        self, allocation_id: UUID, replacement: RescueAllocation
+    ) -> RescueAllocation:
+        """Atomically release one allocation and reserve its validated replacement."""
+        async with self.session_factory.begin() as session:
+            original = await session.scalar(
+                select(RescueAllocationRecord)
+                .where(RescueAllocationRecord.id == allocation_id)
+                .with_for_update()
+            )
+            if original is None or original.status == AssignmentStatus.CANCELLED.value:
+                raise CapacityUnavailable("active allocation does not exist")
+            recipient_ids = sorted({original.recipient_id, replacement.recipient_id}, key=str)
+            recipient_rows = (
+                await session.scalars(
+                    select(RecipientRecord)
+                    .where(RecipientRecord.id.in_(recipient_ids))
+                    .order_by(RecipientRecord.id)
+                    .with_for_update()
+                )
+            ).all()
+            recipients = {row.id: row for row in recipient_rows}
+            target = recipients.get(replacement.recipient_id)
+            source = recipients.get(original.recipient_id)
+            if target is None or source is None or target.available_capacity < replacement.quantity:
+                raise CapacityUnavailable("replacement recipient capacity is insufficient")
+            if replacement.food_item_id != original.food_item_id:
+                raise InventoryUnavailable("replacement must preserve the food item")
+            if replacement.quantity > original.quantity:
+                raise InventoryUnavailable("replacement cannot increase allocated inventory")
+            source.available_capacity += original.quantity
+            source.current_load -= original.quantity
+            target.available_capacity -= replacement.quantity
+            target.current_load += replacement.quantity
+            original.status = AssignmentStatus.CANCELLED.value
+            row = RescueAllocationRecord(
+                id=replacement.id,
+                rescue_id=replacement.rescue_id,
+                recipient_id=replacement.recipient_id,
+                food_item_id=replacement.food_item_id,
+                quantity=replacement.quantity,
+                unit=replacement.unit,
+                status=AssignmentStatus.RESERVED.value,
+                trace_id=replacement.trace_id,
+                created_at=replacement.created_at,
+                updated_at=replacement.updated_at,
+            )
+            session.add(row)
+            session.add(
+                OutboxMessageRecord(
+                    aggregate_type="allocation",
+                    aggregate_id=replacement.id,
+                    message_type="assignment_changed",
+                    payload={
+                        "from_recipient_id": str(original.recipient_id),
+                        "to_recipient_id": str(replacement.recipient_id),
+                    },
+                    status="pending",
+                    attempt_count=0,
+                    available_at=replacement.created_at,
+                    trace_id=replacement.trace_id,
+                )
+            )
+            await session.flush()
+            result = allocation_domain(row)
+        return result
+
     async def list_allocations(self, rescue_id: UUID) -> list[RescueAllocation]:
         async with self.session_factory() as session:
             rows = (
@@ -456,6 +523,72 @@ class NetworkStore:
                 )
             await session.flush()
             result = assignment_domain(row)
+        return result
+
+    async def replace_assignment(
+        self, assignment_id: UUID, replacement: Assignment, cancelled_at: datetime
+    ) -> Assignment:
+        """Atomically cancel a driver assignment and reserve the replacement."""
+        async with self.session_factory.begin() as session:
+            original = await session.scalar(
+                select(AssignmentRecord)
+                .where(AssignmentRecord.id == assignment_id)
+                .with_for_update()
+            )
+            if original is None or original.status == AssignmentStatus.CANCELLED.value:
+                raise CapacityUnavailable("active assignment does not exist")
+            driver_ids = sorted({original.driver_id, replacement.driver_id}, key=str)
+            rows = (
+                await session.scalars(
+                    select(DriverRecord)
+                    .where(DriverRecord.id.in_(driver_ids))
+                    .order_by(DriverRecord.id)
+                    .with_for_update()
+                )
+            ).all()
+            drivers = {row.id: row for row in rows}
+            old_driver = drivers.get(original.driver_id)
+            new_driver = drivers.get(replacement.driver_id)
+            if new_driver is None or not new_driver.active or not new_driver.available:
+                raise CapacityUnavailable("replacement driver is not available")
+            if old_driver is not None:
+                old_driver.available = True
+                old_driver.status = DriverStatus.AVAILABLE.value
+            new_driver.available = False
+            new_driver.status = DriverStatus.ASSIGNED.value
+            original.status = AssignmentStatus.CANCELLED.value
+            original.cancelled_at = cancelled_at
+            new_row = AssignmentRecord(
+                id=replacement.id,
+                rescue_id=replacement.rescue_id,
+                allocation_id=replacement.allocation_id,
+                recipient_id=replacement.recipient_id,
+                driver_id=replacement.driver_id,
+                status=AssignmentStatus.RESERVED.value,
+                accepted_at=replacement.accepted_at,
+                trace_id=replacement.trace_id,
+                version=replacement.version,
+                created_at=replacement.created_at,
+                updated_at=replacement.updated_at,
+            )
+            session.add(new_row)
+            session.add(
+                OutboxMessageRecord(
+                    aggregate_type="assignment",
+                    aggregate_id=replacement.id,
+                    message_type="assignment_changed",
+                    payload={
+                        "from_driver_id": str(original.driver_id),
+                        "to_driver_id": str(replacement.driver_id),
+                    },
+                    status="pending",
+                    attempt_count=0,
+                    available_at=replacement.created_at,
+                    trace_id=replacement.trace_id,
+                )
+            )
+            await session.flush()
+            result = assignment_domain(new_row)
         return result
 
     async def list_assignments(self, rescue_id: UUID) -> list[Assignment]:
