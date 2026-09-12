@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, Field, model_validator
 
 from app.domain.base import TimestampedEntity
-from app.domain.enums import RescueStatus
+from app.domain.enums import AssignmentStatus, RescueStatus
 
 
 class FoodItem(TimestampedEntity):
@@ -14,6 +14,8 @@ class FoodItem(TimestampedEntity):
     unit: str = Field(min_length=1, max_length=50)
     handling_category: str = Field(min_length=1, max_length=100)
     allergen_notes: str | None = Field(default=None, max_length=1000)
+    requires_refrigeration: bool = False
+    dietary_tags: frozenset[str] = frozenset()
 
 
 class Donation(TimestampedEntity):
@@ -45,11 +47,18 @@ class RescueAllocation(TimestampedEntity):
     food_item_id: UUID
     quantity: Decimal = Field(gt=0)
     unit: str = Field(min_length=1, max_length=50)
+    status: AssignmentStatus = AssignmentStatus.PROPOSED
+    trace_id: str = Field(default="system", min_length=1, max_length=100)
 
 
 class Assignment(TimestampedEntity):
     rescue_id: UUID
     driver_id: UUID
+    recipient_id: UUID | None = None
+    allocation_id: UUID | None = None
+    status: AssignmentStatus = AssignmentStatus.PROPOSED
+    trace_id: str = Field(default="system", min_length=1, max_length=100)
+    version: int = Field(default=1, ge=1)
     accepted_at: AwareDatetime | None = None
     cancelled_at: AwareDatetime | None = None
 

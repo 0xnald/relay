@@ -132,3 +132,60 @@ class CommunicationRequestStatus(StrEnum):
 class AgentInvocationStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+
+
+class AssignmentStatus(StrEnum):
+    PROPOSED = "proposed"
+    RESERVED = "reserved"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
+
+
+class DriverStatus(StrEnum):
+    AVAILABLE = "available"
+    ASSIGNED = "assigned"
+    OFFLINE = "offline"
+
+
+class OperationalExceptionType(StrEnum):
+    RECIPIENT_CAPACITY_LOSS = "recipient_capacity_loss"
+    RECIPIENT_STORAGE_LOSS = "recipient_storage_loss"
+    RECIPIENT_DECLINED = "recipient_declined"
+    RECIPIENT_TIMEOUT = "recipient_timeout"
+    DRIVER_CANCELLED = "driver_cancelled"
+    DRIVER_DELAYED = "driver_delayed"
+    PICKUP_WINDOW_CHANGED = "pickup_window_changed"
+    MISSING_REQUIRED_INFORMATION = "missing_required_information"
+    DELIVERY_MISMATCH = "delivery_mismatch"
+    NO_ELIGIBLE_RECIPIENT = "no_eligible_recipient"
+    NO_FEASIBLE_DRIVER = "no_feasible_driver"
+
+
+class OperationalExceptionStatus(StrEnum):
+    OPEN = "open"
+    RECOVERING = "recovering"
+    RECOVERED = "recovered"
+    HUMAN_REVIEW = "human_review"
+    UNRESOLVED = "unresolved"
+
+
+class DecisionRequestStatus(StrEnum):
+    PENDING = "pending"
+    RESOLVED = "resolved"
+    EXPIRED = "expired"
+
+
+class OutboxStatus(StrEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+
+
+class RecoveryStrategy(StrEnum):
+    REMATCH_AFFECTED_ALLOCATION = "rematch_affected_allocation"
+    REPLACE_DRIVER = "replace_driver"
+    TRY_NEXT_RECIPIENT = "try_next_recipient"
+    REQUEST_HUMAN_REVIEW = "request_human_review"
