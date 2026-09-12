@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.domain.enums import DriverStatus, OrganizationType
 from app.models.foundational import OrganizationRecord
 from app.models.network import DonorRecord, DriverRecord, RecipientRecord
+from app.services.matching import StaticRouteProvider
 
 MARKET_SQUARE_ID = UUID("10000000-0000-4000-8000-000000000001")
 HARBOR_ID = UUID("20000000-0000-4000-8000-000000000001")
@@ -26,6 +27,19 @@ class DemoNetworkIds:
     maya_id: UUID = MAYA_ID
     daniel_id: UUID = DANIEL_ID
     lena_id: UUID = LENA_ID
+
+
+def demo_route_provider() -> StaticRouteProvider:
+    return StaticRouteProvider(
+        {
+            (MARKET_SQUARE_ID, HARBOR_ID): (4.0, 12),
+            (MARKET_SQUARE_ID, RIVERSIDE_ID): (8.0, 20),
+            (MARKET_SQUARE_ID, NORTHSIDE_ID): (6.0, 18),
+            (MAYA_ID, MARKET_SQUARE_ID): (2.0, 7),
+            (DANIEL_ID, MARKET_SQUARE_ID): (5.0, 14),
+            (LENA_ID, MARKET_SQUARE_ID): (7.0, 18),
+        }
+    )
 
 
 async def seed_demo_network(factory: async_sessionmaker[AsyncSession]) -> DemoNetworkIds:
