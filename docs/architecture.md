@@ -22,7 +22,7 @@ flowchart TB
     Driver[Driver] -->|assignment, pickup, delivery| Intake
     Intake --> Workflow[Workflow application layer]
     Workflow --> State[Deterministic rescue state machine]
-    Workflow --> Agent[Future Strands coordination agents]
+    Workflow --> Agent[Strands intake and coordination agents]
     Agent --> Gate[Authority and safety gates]
     Gate -->|permitted| Tools[Audited tools]
     Gate -->|judgment required| Human[Human decision request]
@@ -33,8 +33,8 @@ flowchart TB
     Store --> Audit[Events, actions, executions, and evidence]
 ```
 
-Strands Agents and external integrations are architectural seams in Phase 1. They are not yet
-implemented or presented as deployed functionality.
+Strands intake and coordination agents are implemented in Phase 3. External delivery, matching,
+routing, and AgentCore integrations remain architectural seams and are not presented as deployed.
 
 ## Component boundaries
 
@@ -61,13 +61,13 @@ These services remain callable without a model, network connection, or database.
 
 ### API and application workflow
 
-`app/api` handles HTTP translation. `app/workflows` will coordinate use cases and transactions in a
-later phase. API handlers must not embed domain rules. Workflows will ask deterministic services to
-authorize actions and transitions, then persist the resulting event and audit records atomically.
+`app/api` handles HTTP translation. Agent invocation services create trace context, invoke Strands,
+validate structured output, call deterministic boundaries, and persist safe audit metadata. API
+handlers do not embed model calls or domain rules.
 
 ### Agent reasoning
 
-Future code in `app/agents` may:
+Code in `app/agents` may:
 
 - Extract structured operational facts from unstructured messages
 - Classify incoming text and identify missing information
@@ -81,7 +81,7 @@ or call integrations outside audited tool wrappers.
 
 ### Tools and integrations
 
-Future `app/tools` functions form the action boundary. Each invocation will receive an authorized,
+`app/tools` functions form the action boundary. Each invocation receives an authorized,
 typed request and produce an auditable result. `app/integrations` contains vendor-specific adapters
 for messaging, maps, or partner systems. Tool wrappers will record action and execution summaries,
 authority, policy references, trace IDs, outcomes, and safe error metadata.
@@ -109,7 +109,7 @@ Deterministic systems own:
 - Idempotency and transaction boundaries
 - Whether the system is permitted to continue
 
-Future Strands agents own:
+Strands agents own:
 
 - Interpretation of unstructured input
 - Operational exception analysis
@@ -163,3 +163,7 @@ External side effects will require an outbox or equivalent durable-delivery patt
 production use. Phase 2 deliberately does not introduce an event bus or distributed-service
 boundary. See [Transactional event processing](event-processing.md) for the detailed sequence and
 failure guarantees.
+
+Phase 3 adds the Strands boundary described in [Relay agents and Strands architecture](agents.md).
+Critical rescue truth is loaded from persistence for each coordination invocation, and every action
+proposal passes through `AuthorizedActionService` before an application tool can run.

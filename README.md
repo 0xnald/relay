@@ -68,7 +68,7 @@ reasoning.
 ```mermaid
 flowchart LR
     API[API / event intake] --> WF[Workflow application layer]
-    WF --> AG[Future Strands agents]
+    WF --> AG[Strands intake and coordination agents]
     AG --> PE[Deterministic policy and safety gates]
     PE --> TL[Audited tools]
     TL --> RP[Repositories and integrations]
@@ -91,9 +91,9 @@ backend/
     services/         deterministic state and safety services
     repositories/     persistence boundaries and database lifecycle
     models/           SQLAlchemy persistence models
-    schemas/          future transport schemas
-    agents/           reserved for later Strands agent definitions
-    tools/            reserved for audited agent tools
+    schemas/          validated transport and structured-output schemas
+    agents/           Strands agent factory, model configuration, and prompts
+    tools/            bounded Strands and audited application tools
     workflows/        reserved for application orchestration
     observability/    observability adapters
     integrations/     external system adapters
@@ -126,8 +126,10 @@ The API exposes:
 - `GET /health` for process liveness
 - `GET /ready` for database-backed readiness
 - `POST /api/v1/events` for typed, idempotent event ingestion
+- `POST /api/v1/agent/intake` for validated natural-language donation intake
 - `GET /api/v1/rescues/{rescue_id}` for rescue state
 - `GET /api/v1/rescues/{rescue_id}/events` for ordered event history
+- `POST /api/v1/rescues/{rescue_id}/coordinate` for a bounded coordination proposal
 
 Event requests require an `Idempotency-Key` header. A valid `X-Request-ID` is propagated when
 provided; otherwise Relay generates one.
@@ -156,9 +158,14 @@ idempotent event processing, action and tool authorization, database readiness, 
 APIs, and real PostgreSQL integration coverage. See
 [Transactional event processing](docs/event-processing.md).
 
-Later phases will add actual Strands Agents SDK orchestration, audited tools and integrations,
-end-to-end rescue workflows, a user interface, and Amazon Bedrock AgentCore deployment. This
-repository does not claim those integrations are present yet.
+Phase 3 adds real Strands Agents SDK orchestration for structured donation intake and bounded rescue
+coordination. It includes Bedrock model configuration, six application-backed tools, deterministic
+authority and completeness checks, safe lifecycle hooks, queued clarifications, invocation audit
+records, and offline deterministic tests. See [Relay agents and Strands architecture](docs/agents.md).
+
+Later phases will add external messaging and matching integrations, end-to-end rescue workflows, a
+user interface, and Amazon Bedrock AgentCore deployment. This repository does not claim those
+integrations are present yet.
 
 ## License
 
