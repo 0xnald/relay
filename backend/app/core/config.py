@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_url: str = "postgresql+asyncpg://relay:relay@localhost:5432/relay"
     cors_origins: list[str] = Field(default_factory=list)
+    agent_model_provider: Literal["bedrock"] = "bedrock"
+    agent_model_id: str = Field(
+        default="global.anthropic.claude-sonnet-4-6", min_length=1, max_length=255
+    )
+    aws_region: str = Field(default="us-east-1", min_length=1, max_length=64)
 
 
 @lru_cache
