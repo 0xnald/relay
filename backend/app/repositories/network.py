@@ -261,43 +261,90 @@ class NetworkStore:
         self,
         allocation: RescueAllocation,
     ) -> RescueAllocation:
+        return (await self.reserve_allocations([allocation]))[0]
+
+    async def reserve_allocations(
+        self, allocations: Sequence[RescueAllocation]
+    ) -> list[RescueAllocation]:
+        """Reserve an entire split plan in one transaction with ordered row locks."""
+        if not allocations:
+            return []
         async with self.session_factory.begin() as session:
-            recipient = await session.scalar(
-                select(RecipientRecord)
-                .where(RecipientRecord.id == allocation.recipient_id)
-                .with_for_update()
-            )
-            item = await session.get(FoodItemRecord, allocation.food_item_id)
-            if recipient is None or item is None:
-                raise CapacityUnavailable("recipient or food item does not exist")
-            quantity = Decimal(allocation.quantity)
-            if recipient.available_capacity < quantity:
-                raise CapacityUnavailable("recipient capacity is insufficient")
-            allocated = await session.scalar(
-                select(func.coalesce(func.sum(RescueAllocationRecord.quantity), 0)).where(
-                    RescueAllocationRecord.food_item_id == allocation.food_item_id,
-                    RescueAllocationRecord.status != AssignmentStatus.CANCELLED.value,
+            recipient_ids = sorted({item.recipient_id for item in allocations}, key=str)
+            recipient_rows = (
+                await session.scalars(
+                    select(RecipientRecord)
+                    .where(RecipientRecord.id.in_(recipient_ids))
+                    .order_by(RecipientRecord.id)
+                    .with_for_update()
                 )
-            )
-            if Decimal(allocated or 0) + quantity > item.quantity:
-                raise InventoryUnavailable("allocation would duplicate food inventory")
-            recipient.available_capacity -= quantity
-            recipient.current_load += quantity
-            row = RescueAllocationRecord(
-                id=allocation.id,
-                rescue_id=allocation.rescue_id,
-                recipient_id=allocation.recipient_id,
-                food_item_id=allocation.food_item_id,
-                quantity=quantity,
-                unit=allocation.unit,
-                status=AssignmentStatus.RESERVED.value,
-                trace_id=allocation.trace_id,
-                created_at=allocation.created_at,
-                updated_at=allocation.updated_at,
-            )
-            session.add(row)
+            ).all()
+            recipients = {row.id: row for row in recipient_rows}
+            item_ids = {item.food_item_id for item in allocations}
+            item_rows = (
+                await session.scalars(
+                    select(FoodItemRecord).where(FoodItemRecord.id.in_(item_ids)).with_for_update()
+                )
+            ).all()
+            food_items = {row.id: row for row in item_rows}
+            capacity_needed: dict[UUID, Decimal] = {}
+            inventory_needed: dict[UUID, Decimal] = {}
+            for allocation in allocations:
+                quantity = Decimal(allocation.quantity)
+                capacity_needed[allocation.recipient_id] = (
+                    capacity_needed.get(allocation.recipient_id, Decimal(0)) + quantity
+                )
+                inventory_needed[allocation.food_item_id] = (
+                    inventory_needed.get(allocation.food_item_id, Decimal(0)) + quantity
+                )
+            if set(recipients) != set(recipient_ids) or set(food_items) != item_ids:
+                raise CapacityUnavailable("recipient or food item does not exist")
+            for recipient_id, quantity in capacity_needed.items():
+                if recipients[recipient_id].available_capacity < quantity:
+                    raise CapacityUnavailable("recipient capacity is insufficient")
+            for item_id, quantity in inventory_needed.items():
+                allocated = await session.scalar(
+                    select(func.coalesce(func.sum(RescueAllocationRecord.quantity), 0)).where(
+                        RescueAllocationRecord.food_item_id == item_id,
+                        RescueAllocationRecord.status != AssignmentStatus.CANCELLED.value,
+                    )
+                )
+                if Decimal(allocated or 0) + quantity > food_items[item_id].quantity:
+                    raise InventoryUnavailable("allocation would duplicate food inventory")
+            rows: list[RescueAllocationRecord] = []
+            for allocation in allocations:
+                quantity = Decimal(allocation.quantity)
+                recipient = recipients[allocation.recipient_id]
+                recipient.available_capacity -= quantity
+                recipient.current_load += quantity
+                row = RescueAllocationRecord(
+                    id=allocation.id,
+                    rescue_id=allocation.rescue_id,
+                    recipient_id=allocation.recipient_id,
+                    food_item_id=allocation.food_item_id,
+                    quantity=quantity,
+                    unit=allocation.unit,
+                    status=AssignmentStatus.RESERVED.value,
+                    trace_id=allocation.trace_id,
+                    created_at=allocation.created_at,
+                    updated_at=allocation.updated_at,
+                )
+                session.add(row)
+                session.add(
+                    OutboxMessageRecord(
+                        aggregate_type="allocation",
+                        aggregate_id=allocation.id,
+                        message_type="recipient_assigned",
+                        payload={"recipient_id": str(allocation.recipient_id)},
+                        status="pending",
+                        attempt_count=0,
+                        available_at=allocation.created_at,
+                        trace_id=allocation.trace_id,
+                    )
+                )
+                rows.append(row)
             await session.flush()
-            result = allocation_domain(row)
+            result = [allocation_domain(row) for row in rows]
         return result
 
     async def release_capacity(self, allocation_id: UUID) -> RescueAllocation:
