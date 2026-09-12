@@ -1,1 +1,1 @@
-"""Future audited agent tools; intentionally empty in Phase 1."""
+"""Bounded application tools exposed through explicit integration modules."""
