@@ -66,17 +66,18 @@ def postgres_url() -> Iterator[str]:
 @pytest.fixture
 async def pg_factory(postgres_url: str) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(postgres_url)
+    truncate = text(
+        "TRUNCATE TABLE communication_requests, agent_invocations, tool_executions, "
+        "outbox_messages, decision_requests, recovery_attempts, operational_exceptions, "
+        "assignments, rescue_allocations, food_items, donations, drivers, recipients, "
+        "donors, agent_actions, events, rescues, organizations CASCADE"
+    )
     async with engine.begin() as connection:
-        await connection.execute(
-            text(
-                "TRUNCATE TABLE communication_requests, agent_invocations, tool_executions, "
-                "outbox_messages, decision_requests, recovery_attempts, operational_exceptions, "
-                "assignments, rescue_allocations, food_items, donations, drivers, recipients, "
-                "donors, agent_actions, events, rescues, organizations CASCADE"
-            )
-        )
+        await connection.execute(truncate)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     yield factory
+    async with engine.begin() as connection:
+        await connection.execute(truncate)
     await engine.dispose()
 
 
