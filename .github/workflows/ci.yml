@@ -60,3 +60,22 @@ jobs:
         run: uv run alembic upgrade head
       - name: Run PostgreSQL integration tests
         run: uv run pytest -m integration
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate frontend
+        run: pnpm typecheck && pnpm lint && pnpm test && pnpm build -- --webpack
