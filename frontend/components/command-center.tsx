@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
-import type { Dashboard, NetworkDriver, NetworkRecipient, Rescue, RescueDetail } from "../lib/types";
+import type { AgentRuntimeStatus, Dashboard, NetworkDriver, NetworkRecipient, Rescue, RescueDetail } from "../lib/types";
 
 const navigation = ["Overview", "Rescues", "Network", "Decisions", "Activity", "Policies", "Demo Control"] as const;
 type View = (typeof navigation)[number];
@@ -44,8 +44,9 @@ export function CommandCenter({ initialView = "Overview" }: { initialView?: View
   const [detail, setDetail] = useState<RescueDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [runtime, setRuntime] = useState<AgentRuntimeStatus | null>(null);
   const selected = useMemo(() => dashboard?.rescues[0] ?? null, [dashboard]);
-  const load = async () => { try { setDashboard(await api.dashboard()); } catch { setError("Relay API is unavailable. Start the backend on port 8000."); } };
+  const load = async () => { try { const [nextDashboard, nextRuntime] = await Promise.all([api.dashboard(), api.agentStatus()]); setDashboard(nextDashboard); setRuntime(nextRuntime); } catch { setError("Relay API is unavailable. Start the backend on port 8000."); } };
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);

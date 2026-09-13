@@ -85,6 +85,31 @@ class AgentInterpretationFailure(RelayError):
         )
 
 
+class AgentExecutionUnavailable(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "agent_execution_unavailable",
+            "The configured agent runtime is unavailable.",
+            status_code=503,
+        )
+
+
+class AgentExecutionTimeout(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "agent_execution_timeout", "The configured agent runtime timed out.", status_code=504
+        )
+
+
+class AgentExecutionInvalidResponse(RelayError):
+    def __init__(self) -> None:
+        super().__init__(
+            "agent_execution_invalid_response",
+            "The agent runtime returned an invalid response.",
+            status_code=502,
+        )
+
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(RelayError)
     async def relay_error_handler(request: Request, exc: RelayError) -> JSONResponse:

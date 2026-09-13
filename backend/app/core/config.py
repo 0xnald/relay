@@ -25,6 +25,9 @@ class Settings(BaseSettings):
         default="global.anthropic.claude-sonnet-4-6", min_length=1, max_length=255
     )
     aws_region: str = Field(default="us-east-1", min_length=1, max_length=64)
+    agent_execution_mode: Literal["local", "agentcore"] = "local"
+    agentcore_runtime_arn: str | None = None
+    agentcore_region: str | None = None
 
 
 @lru_cache

@@ -19,6 +19,14 @@ class ReadinessResponse(BaseModel):
     checks: dict[str, DependencyStatus]
 
 
+class AgentRuntimeStatus(BaseModel):
+    execution_mode: str
+    provider: str
+    runtime_configured: bool
+    runtime_verified: bool = False
+    region: str
+
+
 @router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Report process liveness without contacting dependencies."""
@@ -35,3 +43,16 @@ async def readiness(request: Request, response: Response) -> ReadinessResponse:
             status="unavailable", checks={"database": DependencyStatus(status="unavailable")}
         )
     return ReadinessResponse(status="ready", checks={"database": DependencyStatus(status="ok")})
+
+
+@router.get("/api/v1/system/agent-status", response_model=AgentRuntimeStatus)
+async def agent_status(request: Request) -> AgentRuntimeStatus:
+    settings = request.app.state.settings
+    return AgentRuntimeStatus(
+        execution_mode=settings.agent_execution_mode,
+        provider="AgentCore Runtime"
+        if settings.agent_execution_mode == "agentcore"
+        else "Local Strands",
+        runtime_configured=bool(settings.agentcore_runtime_arn),
+        region=settings.agentcore_region or settings.aws_region,
+    )

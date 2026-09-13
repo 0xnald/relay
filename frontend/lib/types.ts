@@ -57,3 +57,5 @@ export type NetworkDriver = {
   status: string;
   synthetic: boolean;
 };
+
+export type AgentRuntimeStatus = { execution_mode: string; provider: string; runtime_configured: boolean; runtime_verified: boolean; region: string };
