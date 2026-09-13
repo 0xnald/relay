@@ -16,3 +16,7 @@ build/
 .idea/
 .vscode/
 .DS_Store
+frontend/node_modules/
+frontend/.next/
+frontend/*.tsbuildinfo
+.pnpm-store/
