@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.agents.factory import AgentFactory
 from app.api.agents import router as agents_router
+from app.api.command_center import router as command_center_router
 from app.api.events import router as events_router
 from app.api.health import router as health_router
 from app.api.network import router as network_router
@@ -88,6 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(events_router)
     application.include_router(agents_router)
     application.include_router(network_router)
+    application.include_router(command_center_router)
     return application
 
 

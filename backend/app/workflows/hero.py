@@ -27,6 +27,8 @@ from app.workflows.rescue import RescueWorkflow, verify_delivery
 
 
 class HeroScenarioSummary(DomainModel):
+    rescue_id: UUID
+    donation_id: UUID
     final_rescue_status: str
     allocations: list[dict[str, str]]
     recipient_changes: list[str]
@@ -270,6 +272,8 @@ async def run_hero_scenario(
     recoveries = await store.list_recoveries(rescue_id)
     decisions = await store.list_decisions(rescue_id)
     return HeroScenarioSummary(
+        rescue_id=rescue.id,
+        donation_id=donation.id,
         final_rescue_status=rescue.status.value,
         allocations=[
             {
