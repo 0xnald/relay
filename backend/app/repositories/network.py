@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -50,6 +50,16 @@ class InventoryUnavailable(ValueError):
     pass
 
 
+def _utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _utc_optional(value: datetime | None) -> datetime | None:
+    return _utc(value) if value is not None else None
+
+
 def donor_domain(row: DonorRecord) -> Donor:
     return Donor(
         id=row.id,
@@ -59,8 +69,8 @@ def donor_domain(row: DonorRecord) -> Donor:
         location=GeoPoint(latitude=row.latitude, longitude=row.longitude),
         contact=ContactMetadata.model_validate(row.contact),
         synthetic=row.synthetic,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_utc(row.created_at),
+        updated_at=_utc(row.updated_at),
     )
 
 
@@ -87,8 +97,8 @@ def recipient_domain(row: RecipientRecord) -> Recipient:
         current_load=float(row.current_load),
         contact=ContactMetadata.model_validate(row.contact),
         synthetic=row.synthetic,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_utc(row.created_at),
+        updated_at=_utc(row.updated_at),
     )
 
 
@@ -109,8 +119,8 @@ def driver_domain(row: DriverRecord) -> Driver:
         status=DriverStatus(row.status),
         contact=ContactMetadata.model_validate(row.contact),
         synthetic=row.synthetic,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_utc(row.created_at),
+        updated_at=_utc(row.updated_at),
     )
 
 
@@ -119,11 +129,11 @@ def donation_domain(row: DonationRecord) -> Donation:
         id=row.id,
         donor_id=row.donor_id,
         external_reference=row.external_reference,
-        pickup_window_start=row.pickup_window_start,
-        pickup_window_end=row.pickup_window_end,
+        pickup_window_start=_utc(row.pickup_window_start),
+        pickup_window_end=_utc(row.pickup_window_end),
         notes=row.notes,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_utc(row.created_at),
+        updated_at=_utc(row.updated_at),
     )
 
 
@@ -138,8 +148,8 @@ def food_item_domain(row: FoodItemRecord) -> FoodItem:
         allergen_notes=row.allergen_notes,
         requires_refrigeration=row.requires_refrigeration,
         dietary_tags=frozenset(row.dietary_tags),
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_utc(row.created_at),
+        updated_at=_utc(row.updated_at),
     )
 
 
@@ -153,8 +163,8 @@ def allocation_domain(row: RescueAllocationRecord) -> RescueAllocation:
         unit=row.unit,
         status=AssignmentStatus(row.status),
         trace_id=row.trace_id,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_utc(row.created_at),
+        updated_at=_utc(row.updated_at),
     )
 
 
@@ -166,12 +176,12 @@ def assignment_domain(row: AssignmentRecord) -> Assignment:
         recipient_id=row.recipient_id,
         driver_id=row.driver_id,
         status=AssignmentStatus(row.status),
-        accepted_at=row.accepted_at,
-        cancelled_at=row.cancelled_at,
+        accepted_at=_utc_optional(row.accepted_at),
+        cancelled_at=_utc_optional(row.cancelled_at),
         trace_id=row.trace_id,
         version=row.version,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_utc(row.created_at),
+        updated_at=_utc(row.updated_at),
     )
 
 
@@ -368,13 +378,17 @@ class NetworkStore:
                 recipient.current_load -= allocation.quantity
                 allocation.status = AssignmentStatus.CANCELLED.value
             await session.flush()
+            await session.refresh(allocation)
             result = allocation_domain(allocation)
         return result
 
     async def reassign_allocation(
-        self, allocation_id: UUID, replacement: RescueAllocation
+        self,
+        allocation_id: UUID,
+        replacement: RescueAllocation,
+        assignment_id: UUID | None = None,
     ) -> RescueAllocation:
-        """Atomically release one allocation and reserve its validated replacement."""
+        """Atomically replace an allocation and retarget its active assignment."""
         async with self.session_factory.begin() as session:
             original = await session.scalar(
                 select(RescueAllocationRecord)
@@ -434,6 +448,33 @@ class NetworkStore:
                     trace_id=replacement.trace_id,
                 )
             )
+            if assignment_id is not None:
+                assignment = await session.scalar(
+                    select(AssignmentRecord)
+                    .where(AssignmentRecord.id == assignment_id)
+                    .with_for_update()
+                )
+                if assignment is None or assignment.status == AssignmentStatus.CANCELLED.value:
+                    raise CapacityUnavailable("active assignment does not exist")
+                if assignment.allocation_id != original.id:
+                    raise CapacityUnavailable("assignment does not target the affected allocation")
+                assignment.allocation_id = replacement.id
+                assignment.recipient_id = replacement.recipient_id
+                session.add(
+                    OutboxMessageRecord(
+                        aggregate_type="assignment",
+                        aggregate_id=assignment.id,
+                        message_type="assignment_changed",
+                        payload={
+                            "allocation_id": str(replacement.id),
+                            "recipient_id": str(replacement.recipient_id),
+                        },
+                        status="pending",
+                        attempt_count=0,
+                        available_at=replacement.created_at,
+                        trace_id=replacement.trace_id,
+                    )
+                )
             await session.flush()
             result = allocation_domain(row)
         return result
@@ -488,6 +529,7 @@ class NetworkStore:
                 )
             )
             await session.flush()
+            await session.refresh(row)
             result = assignment_domain(row)
         return result
 
@@ -522,6 +564,7 @@ class NetworkStore:
                     )
                 )
             await session.flush()
+            await session.refresh(row)
             result = assignment_domain(row)
         return result
 
@@ -591,6 +634,39 @@ class NetworkStore:
             result = assignment_domain(new_row)
         return result
 
+    async def retarget_assignment(
+        self, assignment_id: UUID, allocation: RescueAllocation
+    ) -> Assignment:
+        async with self.session_factory.begin() as session:
+            row = await session.scalar(
+                select(AssignmentRecord)
+                .where(AssignmentRecord.id == assignment_id)
+                .with_for_update()
+            )
+            if row is None or row.status == AssignmentStatus.CANCELLED.value:
+                raise CapacityUnavailable("active assignment does not exist")
+            row.allocation_id = allocation.id
+            row.recipient_id = allocation.recipient_id
+            session.add(
+                OutboxMessageRecord(
+                    aggregate_type="assignment",
+                    aggregate_id=row.id,
+                    message_type="assignment_changed",
+                    payload={
+                        "allocation_id": str(allocation.id),
+                        "recipient_id": str(allocation.recipient_id),
+                    },
+                    status="pending",
+                    attempt_count=0,
+                    available_at=allocation.created_at,
+                    trace_id=allocation.trace_id,
+                )
+            )
+            await session.flush()
+            await session.refresh(row)
+            result = assignment_domain(row)
+        return result
+
     async def list_assignments(self, rescue_id: UUID) -> list[Assignment]:
         async with self.session_factory() as session:
             rows = (
@@ -653,14 +729,14 @@ class NetworkStore:
                 id=row.id,
                 rescue_id=row.rescue_id,
                 exception_type=row.exception_type,
-                detected_at=row.detected_at,
+                detected_at=_utc(row.detected_at),
                 source_event_id=row.source_event_id,
                 severity=row.severity,
                 status=row.status,
                 context=row.context,
                 trace_id=row.trace_id,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
+                created_at=_utc(row.created_at),
+                updated_at=_utc(row.updated_at),
             )
             for row in rows
         ]
@@ -680,6 +756,30 @@ class NetworkStore:
                     updated_at=attempt.updated_at,
                 )
             )
+
+    async def list_recoveries(self, rescue_id: UUID) -> list[RecoveryAttemptRecord]:
+        async with self.session_factory() as session:
+            rows = (
+                await session.scalars(
+                    select(RecoveryAttemptRecordModel)
+                    .where(RecoveryAttemptRecordModel.rescue_id == rescue_id)
+                    .order_by(RecoveryAttemptRecordModel.created_at)
+                )
+            ).all()
+        return [
+            RecoveryAttemptRecord(
+                id=row.id,
+                rescue_id=row.rescue_id,
+                exception_id=row.exception_id,
+                strategy=row.strategy,
+                succeeded=row.succeeded,
+                outcome_summary=row.outcome_summary,
+                trace_id=row.trace_id,
+                created_at=_utc(row.created_at),
+                updated_at=_utc(row.updated_at),
+            )
+            for row in rows
+        ]
 
     async def add_decision(self, decision: HumanReviewRequest) -> HumanReviewRequest:
         async with self.session_factory.begin() as session:
@@ -719,6 +819,7 @@ class NetworkStore:
             row.resolution = resolution
             row.resolved_at = resolved_at
             await session.flush()
+            await session.refresh(row)
             result = HumanReviewRequest(
                 id=row.id,
                 rescue_id=row.rescue_id,
@@ -729,12 +830,12 @@ class NetworkStore:
                 actions_tried=tuple(row.actions_tried),
                 allowed_options=tuple(row.allowed_options),
                 status=row.status,
-                requested_at=row.requested_at,
-                resolved_at=row.resolved_at,
+                requested_at=_utc(row.requested_at),
+                resolved_at=_utc_optional(row.resolved_at),
                 resolution=row.resolution,
                 trace_id=row.trace_id,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
+                created_at=_utc(row.created_at),
+                updated_at=_utc(row.updated_at),
             )
         return result
 
@@ -755,12 +856,12 @@ class NetworkStore:
                 actions_tried=tuple(row.actions_tried),
                 allowed_options=tuple(row.allowed_options),
                 status=row.status,
-                requested_at=row.requested_at,
-                resolved_at=row.resolved_at,
+                requested_at=_utc(row.requested_at),
+                resolved_at=_utc_optional(row.resolved_at),
                 resolution=row.resolution,
                 trace_id=row.trace_id,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
+                created_at=_utc(row.created_at),
+                updated_at=_utc(row.updated_at),
             )
             for row in rows
         ]
@@ -780,12 +881,12 @@ class NetworkStore:
                 payload=row.payload,
                 status=row.status,
                 attempt_count=row.attempt_count,
-                available_at=row.available_at,
-                delivered_at=row.delivered_at,
+                available_at=_utc(row.available_at),
+                delivered_at=_utc_optional(row.delivered_at),
                 last_error=row.last_error,
                 trace_id=row.trace_id,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
+                created_at=_utc(row.created_at),
+                updated_at=_utc(row.updated_at),
             )
             for row in rows
         ]

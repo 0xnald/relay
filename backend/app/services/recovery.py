@@ -105,6 +105,7 @@ class RecoveryStrategyExecutor:
         exception: OperationalException,
         affected: RescueAllocation,
         plan: MatchPlan,
+        affected_assignment: Assignment | None = None,
     ) -> RescueAllocation:
         replacements = [
             candidate
@@ -122,7 +123,11 @@ class RecoveryStrategyExecutor:
             unit=affected.unit,
             trace_id=exception.trace_id,
         )
-        persisted = await self.store.reassign_allocation(affected.id, replacement)
+        persisted = await self.store.reassign_allocation(
+            affected.id,
+            replacement,
+            assignment_id=affected_assignment.id if affected_assignment is not None else None,
+        )
         await self._record(
             exception,
             RecoveryStrategy.REMATCH_AFFECTED_ALLOCATION,

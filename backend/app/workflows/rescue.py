@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -11,6 +12,31 @@ from app.repositories.network import NetworkStore
 from app.services.assignments import AllocationService
 from app.services.event_processing import EventIngestionService, EventProcessingResult
 from app.services.matching import MatchPlan, RecipientMatchingService
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryVerificationResult:
+    matches: bool
+    differences: dict[str, float]
+
+
+def verify_delivery(
+    allocations: Sequence[RescueAllocation], delivered: dict[UUID, float]
+) -> DeliveryVerificationResult:
+    expected: dict[UUID, float] = {}
+    for allocation in allocations:
+        if allocation.status.value != "cancelled":
+            expected[allocation.food_item_id] = expected.get(allocation.food_item_id, 0.0) + float(
+                allocation.quantity
+            )
+    differences = {
+        str(item_id): round(delivered.get(item_id, 0.0) - quantity, 3)
+        for item_id, quantity in expected.items()
+        if delivered.get(item_id, 0.0) != quantity
+    }
+    unexpected = set(delivered) - set(expected)
+    differences.update({str(item_id): delivered[item_id] for item_id in unexpected})
+    return DeliveryVerificationResult(not differences, differences)
 
 
 class RescueWorkflow:
@@ -45,8 +71,8 @@ class RescueWorkflow:
                 actor=ActorRole.DONOR,
                 event_type=EventType.DONATION_CREATED,
                 payload={
-                    "donation_id": donation.id,
-                    "donor_organization_id": donor.organization_id,
+                    "donation_id": str(donation.id),
+                    "donor_organization_id": str(donor.organization_id),
                 },
                 idempotency_key=f"workflow:{rescue_id}:created",
                 trace_id=trace_id,

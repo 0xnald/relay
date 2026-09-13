@@ -1,7 +1,8 @@
 import asyncio
 import os
 from collections.abc import AsyncIterator, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
@@ -17,18 +18,28 @@ from app.domain.agents import AgentInvocation
 from app.domain.enums import (
     ActorRole,
     AgentInvocationStatus,
+    AssignmentStatus,
     EventType,
     OrganizationType,
     RescueStatus,
 )
 from app.domain.events import Event
-from app.domain.rescue import Rescue
+from app.domain.rescue import Assignment, Donation, FoodItem, Rescue, RescueAllocation
 from app.models.foundational import EventRecord, OrganizationRecord, RescueRecord
+from app.repositories.network import CapacityUnavailable, NetworkStore
 from app.repositories.sqlalchemy import SqlAlchemyAgentActionRepository
 from app.repositories.uow import SqlAlchemyUnitOfWork
 from app.services.agent_audit import AgentInvocationAuditService
 from app.services.communications import CommunicationRequestService
+from app.services.demo_network import (
+    HARBOR_ID,
+    MARKET_SQUARE_ID,
+    MAYA_ID,
+    RIVERSIDE_ID,
+    seed_demo_network,
+)
 from app.services.event_processing import EventIngestionService, EventProcessingResult
+from app.workflows.hero import run_hero_scenario
 
 pytestmark = pytest.mark.integration
 
@@ -59,7 +70,9 @@ async def pg_factory(postgres_url: str) -> AsyncIterator[async_sessionmaker[Asyn
         await connection.execute(
             text(
                 "TRUNCATE TABLE communication_requests, agent_invocations, tool_executions, "
-                "agent_actions, events, rescues, organizations CASCADE"
+                "outbox_messages, decision_requests, recovery_attempts, operational_exceptions, "
+                "assignments, rescue_allocations, food_items, donations, drivers, recipients, "
+                "donors, agent_actions, events, rescues, organizations CASCADE"
             )
         )
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -113,17 +126,23 @@ async def test_migrations_reach_head_and_use_native_postgresql_types(
                     "WHERE (table_name = 'events' "
                     "AND column_name IN ('id', 'payload', 'created_at')) "
                     "OR (table_name = 'rescues' AND column_name = 'id') "
-                    "OR (table_name = 'agent_invocations' AND column_name = 'tool_names')"
+                    "OR (table_name = 'agent_invocations' AND column_name = 'tool_names') "
+                    "OR (table_name = 'recipients' AND column_name = 'accepted_food_categories') "
+                    "OR (table_name = 'decision_requests' AND column_name = 'known_evidence') "
+                    "OR (table_name = 'outbox_messages' AND column_name = 'payload')"
                 )
             )
         ).all()
     types = {(row.table_name, row.column_name): (row.data_type, row.udt_name) for row in rows}
 
-    assert revision == "20260912_0006"
+    assert revision == "20260913_0007"
     assert types[("events", "id")][1] == "uuid"
     assert types[("rescues", "id")][1] == "uuid"
     assert types[("events", "payload")][1] == "jsonb"
     assert types[("agent_invocations", "tool_names")][1] == "jsonb"
+    assert types[("recipients", "accepted_food_categories")][1] == "jsonb"
+    assert types[("decision_requests", "known_evidence")][1] == "jsonb"
+    assert types[("outbox_messages", "payload")][1] == "jsonb"
     assert types[("events", "created_at")][0] == "timestamp with time zone"
 
 
@@ -306,3 +325,137 @@ async def test_audit_failure_rolls_back_event_and_state(
     assert persisted is not None and persisted.status is RescueStatus.AWAITING_DRIVER
     assert persisted.version == rescue.version
     assert stored_event is None
+
+
+async def seed_network_allocation(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    quantity: Decimal,
+    reserve: bool = False,
+) -> tuple[NetworkStore, Rescue, FoodItem, RescueAllocation]:
+    await seed_demo_network(factory)
+    store = NetworkStore(factory)
+    donor = await store.get_donor(MARKET_SQUARE_ID)
+    assert donor is not None
+    donation = Donation(
+        donor_id=donor.id,
+        pickup_window_start=datetime.now(UTC),
+        pickup_window_end=datetime.now(UTC) + timedelta(hours=3),
+    )
+    item = FoodItem(
+        donation_id=donation.id,
+        name="PostgreSQL prepared meals",
+        quantity=quantity,
+        unit="meals",
+        handling_category="prepared_meal",
+        requires_refrigeration=True,
+        dietary_tags=frozenset({"general"}),
+    )
+    await store.create_donation(donation, [item])
+    rescue = Rescue(donation_id=donation.id)
+    async with SqlAlchemyUnitOfWork(factory) as uow:
+        await uow.rescues.create(rescue, donor_organization_id=donor.organization_id)
+        await uow.commit()
+    allocation = RescueAllocation(
+        rescue_id=rescue.id,
+        recipient_id=HARBOR_ID,
+        food_item_id=item.id,
+        quantity=quantity,
+        unit=item.unit,
+        trace_id="trace-postgres-network",
+    )
+    if reserve:
+        allocation = (await store.reserve_allocations([allocation]))[0]
+    return store, rescue, item, allocation
+
+
+async def test_capacity_row_lock_prevents_concurrent_overbooking(
+    pg_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    first_store, _, _, first = await seed_network_allocation(pg_factory, quantity=Decimal("40"))
+    second_store, _, _, second = await seed_network_allocation(pg_factory, quantity=Decimal("40"))
+
+    results = await asyncio.gather(
+        first_store.reserve_allocations([first]),
+        second_store.reserve_allocations([second]),
+        return_exceptions=True,
+    )
+
+    assert sum(isinstance(result, list) for result in results) == 1
+    assert sum(isinstance(result, CapacityUnavailable) for result in results) == 1
+    harbor = next(item for item in await first_store.list_recipients() if item.id == HARBOR_ID)
+    assert harbor.available_capacity == 20
+
+
+async def test_driver_row_lock_prevents_double_assignment(
+    pg_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    store, rescue, _, allocation = await seed_network_allocation(
+        pg_factory, quantity=Decimal("20"), reserve=True
+    )
+    proposed = [
+        Assignment(
+            rescue_id=rescue.id,
+            allocation_id=allocation.id,
+            recipient_id=HARBOR_ID,
+            driver_id=MAYA_ID,
+            trace_id=f"trace-driver-race-{index}",
+        )
+        for index in range(2)
+    ]
+
+    results = await asyncio.gather(
+        *(store.create_assignment(item) for item in proposed), return_exceptions=True
+    )
+
+    assert sum(isinstance(result, Assignment) for result in results) == 1
+    assert sum(isinstance(result, CapacityUnavailable) for result in results) == 1
+    persisted = await store.list_assignments(rescue.id)
+    assert len(persisted) == 1
+    assert persisted[0].status is AssignmentStatus.RESERVED
+
+
+async def test_failed_recovery_reassignment_rolls_back_capacity_and_allocation(
+    pg_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    store, rescue, item, original = await seed_network_allocation(
+        pg_factory, quantity=Decimal("50"), reserve=True
+    )
+    replacement = RescueAllocation(
+        rescue_id=rescue.id,
+        recipient_id=RIVERSIDE_ID,
+        food_item_id=item.id,
+        quantity=Decimal("50"),
+        unit=item.unit,
+        trace_id="trace-recovery-rollback",
+    )
+
+    with pytest.raises(CapacityUnavailable, match="capacity is insufficient"):
+        await store.reassign_allocation(original.id, replacement)
+
+    allocations = await store.list_allocations(rescue.id)
+    recipients = {item.id: item for item in await store.list_recipients()}
+    assert [(item.id, item.status) for item in allocations] == [
+        (original.id, AssignmentStatus.RESERVED)
+    ]
+    assert recipients[HARBOR_ID].available_capacity == 10
+    assert recipients[RIVERSIDE_ID].available_capacity == 45
+
+
+async def test_hero_path_persists_decision_recovery_and_outbox(
+    pg_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    await seed_demo_network(pg_factory)
+    store = NetworkStore(pg_factory)
+    summary = await run_hero_scenario(store, lambda: SqlAlchemyUnitOfWork(pg_factory))
+    decisions = await store.list_decisions()
+    outbox = await store.list_outbox()
+
+    assert summary.final_rescue_status == "completed"
+    assert summary.delivery_verified
+    assert len(decisions) == 1 and decisions[0].status.value == "resolved"
+    assert {item.message_type for item in outbox} >= {
+        "recipient_assigned",
+        "driver_assigned",
+        "assignment_changed",
+    }

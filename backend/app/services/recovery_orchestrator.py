@@ -45,6 +45,7 @@ class RecoveryOrchestrator:
         plan: MatchPlan,
         *,
         policy: Policy | None,
+        affected_assignment: Assignment | None = None,
     ) -> RescueAllocation | None:
         await self.executor.store.update_exception_status(
             exception.id, OperationalExceptionStatus.RECOVERING
@@ -63,7 +64,10 @@ class RecoveryOrchestrator:
             return None
         try:
             return await self.executor.rematch_allocation(
-                exception=exception, affected=affected, plan=plan
+                exception=exception,
+                affected=affected,
+                plan=plan,
+                affected_assignment=affected_assignment,
             )
         except Exception as exc:
             await self.executor.mark_failure(

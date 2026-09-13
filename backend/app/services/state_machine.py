@@ -51,7 +51,12 @@ VALID_TRANSITIONS: dict[RescueStatus, frozenset[RescueStatus]] = {
         {RescueStatus.PICKUP_PENDING, RescueStatus.EXCEPTION_DETECTED, RescueStatus.CANCELLED}
     ),
     RescueStatus.PICKUP_PENDING: frozenset(
-        {RescueStatus.IN_TRANSIT, RescueStatus.EXCEPTION_DETECTED, RescueStatus.CANCELLED}
+        {
+            RescueStatus.IN_TRANSIT,
+            RescueStatus.EXCEPTION_DETECTED,
+            RescueStatus.HUMAN_REVIEW,
+            RescueStatus.CANCELLED,
+        }
     ),
     RescueStatus.IN_TRANSIT: frozenset(
         {RescueStatus.DELIVERY_PENDING, RescueStatus.EXCEPTION_DETECTED}
