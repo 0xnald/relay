@@ -1,7 +1,7 @@
 from typing import cast
 from uuid import UUID
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.network import HumanReviewRequest, OperationalException
@@ -53,7 +53,10 @@ async def list_decisions(request: Request) -> list[HumanReviewRequest]:
 @router.get("/decisions/{decision_id}", response_model=HumanReviewRequest)
 async def get_decision(decision_id: UUID, request: Request) -> HumanReviewRequest:
     decisions = await cast(NetworkStore, request.app.state.network_store).list_decisions()
-    return next(item for item in decisions if item.id == decision_id)
+    decision = next((item for item in decisions if item.id == decision_id), None)
+    if decision is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Decision request not found")
+    return decision
 
 
 @router.post("/decisions/{decision_id}/resolve", response_model=HumanReviewRequest)

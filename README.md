@@ -130,6 +130,9 @@ The API exposes:
 - `GET /api/v1/rescues/{rescue_id}` for rescue state
 - `GET /api/v1/rescues/{rescue_id}/events` for ordered event history
 - `POST /api/v1/rescues/{rescue_id}/coordinate` for a bounded coordination proposal
+- `GET /api/v1/network/recipients` and `/drivers` for operational network views
+- `GET /api/v1/rescues/{rescue_id}/allocations`, `/assignments`, and `/exceptions`
+- `GET /api/v1/decisions` and `GET/POST /api/v1/decisions/{decision_id}` for human review
 
 Event requests require an `Idempotency-Key` header. A valid `X-Request-ID` is propagated when
 provided; otherwise Relay generates one.
@@ -163,9 +166,19 @@ coordination. It includes Bedrock model configuration, six application-backed to
 authority and completeness checks, safe lifecycle hooks, queued clarifications, invocation audit
 records, and offline deterministic tests. See [Relay agents and Strands architecture](docs/agents.md).
 
-Later phases will add external messaging and matching integrations, end-to-end rescue workflows, a
-user interface, and Amazon Bedrock AgentCore deployment. This repository does not claim those
-integrations are present yet.
+Phase 4 adds the persisted synthetic rescue network, deterministic route/eligibility/feasibility and
+scoring engines, atomic capacity and driver assignment, operational exception recovery, the bounded
+Strands Exception Agent, human pause/resume, and the transactional outbox. The executable backend
+hero scenario reaches verified delivery through real services without AWS access:
+
+```bash
+uv run python scripts/run_hero_scenario.py
+```
+
+See [Matching and recovery](docs/matching-and-recovery.md) for the scoring formula, locking model,
+recovery flow, and demo constraints. Later phases will add external notification providers, a user
+interface, and Amazon Bedrock AgentCore deployment. Relay does not claim live routing or external
+message delivery in Phase 4.
 
 ## License
 
