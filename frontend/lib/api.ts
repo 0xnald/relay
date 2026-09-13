@@ -1,4 +1,4 @@
-import type { Dashboard, RescueDetail } from "./types";
+import type { Dashboard, NetworkDriver, NetworkRecipient, RescueDetail } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
@@ -8,6 +8,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   dashboard: () => request<Dashboard>("/api/v1/dashboard"),
+  recipients: () => request<NetworkRecipient[]>("/api/v1/network/recipients"),
+  drivers: () => request<NetworkDriver[]>("/api/v1/network/drivers"),
   rescue: (id: string) => request<RescueDetail>(`/api/v1/rescues/${id}/command-center`),
   runHero: () => request<{ rescue_id: string }>("/api/v1/demo/hero", { method: "POST" }),
   resolveDecision: (id: string, resolution: string) => request(`/api/v1/decisions/${id}/resolve`, {

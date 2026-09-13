@@ -157,6 +157,9 @@ recovery, evidence decision, and verified-delivery receipt. Organizations, metri
 in this view are synthetic demo data. The UI does not imply live dispatch, external messages, or an
 Amazon Bedrock AgentCore deployment.
 
+For a recording-oriented control page, open `http://localhost:3000/demo`. The command center polls
+the backend every three seconds so other views refresh from persisted state without browser reloads.
+
 ## Quality gates
 
 ```bash

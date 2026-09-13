@@ -33,3 +33,27 @@ export type RescueDetail = {
   route: { source: string; pickup_feasible: boolean };
   receipt: { verified: boolean; completed_at: string | null };
 };
+
+export type NetworkRecipient = {
+  id: string;
+  name: string;
+  active: boolean;
+  accepted_food_categories: string[];
+  cold_storage_available: boolean;
+  total_capacity: number;
+  available_capacity: number;
+  reliability: number;
+  synthetic: boolean;
+};
+
+export type NetworkDriver = {
+  id: string;
+  name: string;
+  available: boolean;
+  vehicle_type: string;
+  vehicle_capacity: number;
+  refrigerated_vehicle: boolean;
+  reliability: number;
+  status: string;
+  synthetic: boolean;
+};
