@@ -133,9 +133,29 @@ The API exposes:
 - `GET /api/v1/network/recipients` and `/drivers` for operational network views
 - `GET /api/v1/rescues/{rescue_id}/allocations`, `/assignments`, and `/exceptions`
 - `GET /api/v1/decisions` and `GET/POST /api/v1/decisions/{decision_id}` for human review
+- `GET /api/v1/dashboard`, rescue command-center detail, and `POST /api/v1/demo/hero` for the
+  synthetic operator demo (disabled when `RELAY_ENVIRONMENT=production`)
 
 Event requests require an `Idempotency-Key` header. A valid `X-Request-ID` is propagated when
 provided; otherwise Relay generates one.
+
+## Command center demo
+
+Phase 5 adds a local Next.js command center that talks to the FastAPI service through a development
+proxy. Start PostgreSQL and the backend as above, then run the frontend in another terminal:
+
+```bash
+cd frontend
+corepack enable
+pnpm install
+pnpm dev
+```
+
+Open `http://localhost:3000` and choose **Run synthetic hero demo**. That control calls the real
+backend hero workflow, then displays the persisted rescue, food allocations, driver cancellation and
+recovery, evidence decision, and verified-delivery receipt. Organizations, metrics, and route labels
+in this view are synthetic demo data. The UI does not imply live dispatch, external messages, or an
+Amazon Bedrock AgentCore deployment.
 
 ## Quality gates
 
@@ -179,6 +199,11 @@ See [Matching and recovery](docs/matching-and-recovery.md) for the scoring formu
 recovery flow, and demo constraints. Later phases will add external notification providers, a user
 interface, and Amazon Bedrock AgentCore deployment. Relay does not claim live routing or external
 message delivery in Phase 4.
+
+Phase 5 adds the judge-facing local operations command center and backend dashboard endpoints. Its
+single demo control runs the existing executable hero scenario through real repositories, workflow
+services, state transitions, exception recovery, and receipt verification. It does not add AgentCore
+or external operational integrations.
 
 ## License
 
