@@ -394,3 +394,26 @@ async def test_hero_scenario_uses_real_services_and_completes(
     assert any(value.endswith(":resolved") for value in summary.human_decisions)
     assert "substitute_recipient" in summary.autonomous_actions
     assert "search_replacement_driver" in summary.autonomous_actions
+
+
+async def test_hero_scenario_reruns_on_a_persistent_network(
+    network: tuple[NetworkStore, async_sessionmaker[AsyncSession], AsyncEngine],
+) -> None:
+    """Public demos run the scenario repeatedly against one database; the seed must restore
+    the synthetic network's operational baseline while keeping earlier rescues intact."""
+    store, factory, _ = network
+    first = await run_hero_scenario(store, lambda: SqlAlchemyUnitOfWork(factory))
+    await seed_demo_network(factory)
+    recipients = {item.id: item for item in await store.list_recipients()}
+    assert recipients[HARBOR_ID].cold_storage_available
+    assert recipients[HARBOR_ID].available_capacity == recipients[HARBOR_ID].total_capacity
+    assert all(driver.available for driver in await store.list_drivers())
+
+    second = await run_hero_scenario(store, lambda: SqlAlchemyUnitOfWork(factory))
+
+    assert second.rescue_id != first.rescue_id
+    assert second.final_rescue_status == "completed"
+    assert second.delivery_verified
+    assert second.recipient_changes == first.recipient_changes
+    assert second.driver_changes == first.driver_changes
+    assert await store.list_allocations(first.rescue_id)

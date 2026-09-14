@@ -42,10 +42,42 @@ def demo_route_provider() -> StaticRouteProvider:
     )
 
 
+RECIPIENT_BASELINE_COLD_STORAGE = {HARBOR_ID: True, RIVERSIDE_ID: True, NORTHSIDE_ID: False}
+DEMO_DRIVER_IDS = (MAYA_ID, DANIEL_ID, LENA_ID)
+
+
+async def reset_demo_network(session: AsyncSession) -> None:
+    """Restore the synthetic actors' operational baseline so the hero scenario can rerun.
+
+    Completed rescues, allocations, assignments, and audit history are left intact; only the
+    mutable capacity, storage, and availability state of the synthetic network is reset.
+    """
+    for recipient_id, cold_storage in RECIPIENT_BASELINE_COLD_STORAGE.items():
+        recipient = await session.get(RecipientRecord, recipient_id)
+        if recipient is None:
+            continue
+        recipient.active = True
+        recipient.cold_storage_available = cold_storage
+        recipient.available_capacity = recipient.total_capacity
+        recipient.current_load = Decimal("0")
+    for driver_id in DEMO_DRIVER_IDS:
+        driver = await session.get(DriverRecord, driver_id)
+        if driver is None:
+            continue
+        driver.active = True
+        driver.available = True
+        driver.status = DriverStatus.AVAILABLE.value
+
+
 async def seed_demo_network(factory: async_sessionmaker[AsyncSession]) -> DemoNetworkIds:
-    """Idempotently seed explicitly synthetic actors for demos and tests."""
+    """Idempotently seed explicitly synthetic actors for demos and tests.
+
+    When the network already exists, its operational baseline is restored instead so repeated
+    demo runs on a persistent database start from the same state.
+    """
     async with factory.begin() as session:
         if await session.get(DonorRecord, MARKET_SQUARE_ID) is not None:
+            await reset_demo_network(session)
             return DemoNetworkIds()
         donor_org = UUID("11000000-0000-4000-8000-000000000001")
         recipient_orgs = [
