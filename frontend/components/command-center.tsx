@@ -1,68 +1,195 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { api } from "../lib/api";
-import type { AgentRuntimeStatus, Dashboard, NetworkDriver, NetworkRecipient, Rescue, RescueDetail } from "../lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { api, ApiError } from "../lib/api";
+import type { AgentRuntimeStatus, Dashboard, HeroSummary, NetworkDriver, NetworkRecipient, Rescue, RescueDetail } from "../lib/types";
+import { AppShell, type View } from "./app-shell";
+import { ErrorCard } from "./ui";
+import { ActivityView } from "./views/activity";
+import { DecisionsView } from "./views/decisions";
+import { DemoView } from "./views/demo";
+import { NetworkView } from "./views/network";
+import { OverviewView } from "./views/overview";
+import { PoliciesView } from "./views/policies";
+import { RescueDetailView } from "./views/rescue-detail";
+import { RescuesView } from "./views/rescues";
 
-const navigation = ["Overview", "Rescues", "Network", "Decisions", "Activity", "Policies", "Demo Control"] as const;
-type View = (typeof navigation)[number];
+const POLL_MS = 3000;
+const STALE_MS = 15_000;
+const ACTIVITY_RESCUES = 5;
 
-const metricLabels: Array<[string, string]> = [
-  ["active_rescues", "Active rescues"],
-  ["completed_today", "Completed today"],
-  ["food_rescued", "Demo food rescued"],
-  ["autonomous_actions", "Autonomous actions"],
-  ["human_interventions", "Human interventions"],
-  ["recoveries", "Recoveries"],
-  ["at_risk_rescues", "At-risk rescues"]
-];
-
-function Status({ children }: { children: string }) {
-  const tone = children.includes("completed") || children.includes("recovered") ? "bg-emerald-100 text-emerald-800" : children.includes("review") || children.includes("exception") ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700";
-  return <span className={`rounded-full px-2 py-1 text-xs font-semibold capitalize ${tone}`}>{children.replaceAll("_", " ")}</span>;
+function describe(error: unknown): string {
+  if (error instanceof ApiError) return `The Relay API responded with HTTP ${error.status}.`;
+  if (error instanceof TypeError) return "The Relay API could not be reached.";
+  return "Unexpected error while talking to the Relay API.";
 }
 
-function Empty({ title, body }: { title: string; body: string }) {
-  return <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><h3 className="font-semibold">{title}</h3><p className="mt-2 text-sm text-slate-500">{body}</p></div>;
-}
-
-function RescueTable({ rescues, select }: { rescues: Rescue[]; select: (rescue: Rescue) => void }) {
-  if (!rescues.length) return <Empty title="No operational rescues yet" body="Run the synthetic hero workflow to populate this demo command center." />;
-  return <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="p-4">Rescue</th><th>Food</th><th>Recipients</th><th>Driver</th><th>Risk</th><th>Progress</th><th></th></tr></thead><tbody>{rescues.map((rescue) => <tr className="border-b last:border-0" key={rescue.id}><td className="p-4"><p className="font-semibold">{rescue.donor}</p><p className="font-mono text-xs text-slate-500">{rescue.short_code}</p><Status>{rescue.status}</Status></td><td>{rescue.food_summary}</td><td>{rescue.recipients.join(", ") || "—"}</td><td>{rescue.drivers.join(", ") || "—"}</td><td>{rescue.exception_count ? `${rescue.exception_count} resolved` : "Clear"}</td><td><div className="h-2 w-24 overflow-hidden rounded bg-slate-100"><div className="h-full bg-relay" style={{ width: `${rescue.progress}%` }} /></div></td><td className="pr-4"><button className="rounded-md border border-slate-300 px-3 py-2 font-medium hover:bg-slate-50" onClick={() => select(rescue)}>Open</button></td></tr>)}</tbody></table></div>;
-}
-
-function Detail({ detail, back }: { detail: RescueDetail; back: () => void }) {
-  return <section className="space-y-5"><button onClick={back} className="text-sm font-semibold text-relay">← Back to rescue list</button><div className="rounded-xl border border-slate-200 bg-white p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Rescue {detail.rescue.short_code}</p><h2 className="mt-1 text-2xl font-bold">{detail.donor} → verified delivery</h2><p className="mt-2 text-sm text-slate-500">Trace ID: <span className="font-mono">{detail.trace_id}</span></p></div><Status>{detail.rescue.status}</Status></div><div className="mt-6 grid gap-4 md:grid-cols-3"><Info title="Pickup deadline" value={new Date(detail.rescue.pickup_deadline).toLocaleString()} /><Info title="Route" value={detail.route.source} /><Info title="Feasibility" value={detail.route.pickup_feasible ? "Pickup feasible" : "Re-check required"} /></div></div><div className="grid gap-5 lg:grid-cols-2"><Panel title="Food and handling"><div className="space-y-3">{detail.food_items.map((item) => <div key={item.name} className="rounded-lg bg-slate-50 p-3"><b>{item.quantity} {item.unit}</b> {item.name}<p className="mt-1 text-xs text-slate-500">{item.handling_category} · {item.requires_refrigeration ? "cold storage required" : "ambient handling"}</p></div>)}</div></Panel><Panel title="Assignments and recovery"><div className="space-y-3">{detail.allocations.map((allocation) => <div key={allocation.id} className="flex justify-between rounded-lg bg-slate-50 p-3"><span>{allocation.quantity} {allocation.unit} → <b>{allocation.recipient}</b></span><Status>{allocation.status}</Status></div>)}{detail.assignments.map((assignment) => <div key={assignment.id} className="text-sm text-slate-600">Driver assignment: <b>{assignment.driver}</b> · <Status>{assignment.status}</Status></div>)}</div></Panel></div><Panel title="Operational timeline"><ol className="relative border-l border-slate-200 pl-6">{detail.timeline.map((event, index) => <li className="mb-5" key={`${event.kind}-${index}`}><span className="absolute -left-1.5 mt-1 h-3 w-3 rounded-full bg-relay"/><p className="font-semibold capitalize">{event.kind.replaceAll("_", " ")}</p><p className="text-xs text-slate-500">{new Date(event.at).toLocaleString()} · {event.actor}</p><p className="mt-1 text-sm text-slate-600">{String(event.detail.summary ?? Object.entries(event.detail).map(([key, value]) => `${key}: ${value}`).join(" · "))}</p></li>)}</ol></Panel><div className="grid gap-5 lg:grid-cols-2"><Panel title="Exceptions and recoveries">{detail.exceptions.map((item, index) => <p className="mb-2 text-sm" key={`${item.exception_type}-${index}`}><Status>{item.status}</Status> <span className="ml-2 capitalize">{item.exception_type.replaceAll("_", " ")}</span></p>)}{detail.recoveries.map((item) => <p className="mt-2 text-sm text-slate-600" key={item.strategy}>Relay: {item.outcome_summary}</p>)}</Panel><Panel title="Delivery receipt"><p className="text-3xl">{detail.receipt.verified ? "✓" : "…"}</p><p className="mt-2 font-semibold">{detail.receipt.verified ? "Delivery verified" : "Verification pending"}</p><p className="text-sm text-slate-500">Completed {detail.receipt.completed_at ? new Date(detail.receipt.completed_at).toLocaleString() : "—"}</p></Panel></div></section>;
-}
-
-function Panel({ title, children }: { title: string; children: React.ReactNode }) { return <section className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="mb-4 font-semibold">{title}</h3>{children}</section>; }
-function Info({ title, value }: { title: string; value: string }) { return <div><p className="text-xs uppercase tracking-wide text-slate-500">{title}</p><p className="mt-1 font-semibold">{value}</p></div>; }
-
-export function CommandCenter({ initialView = "Overview", headerExtra }: { initialView?: View; headerExtra?: React.ReactNode }) {
+export function CommandCenter({ initialView = "Overview" }: { initialView?: View }) {
   const [view, setView] = useState<View>(initialView);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
-  const [detail, setDetail] = useState<RescueDetail | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [runtime, setRuntime] = useState<AgentRuntimeStatus | null>(null);
-  const selected = useMemo(() => dashboard?.rescues[0] ?? null, [dashboard]);
-  const load = async () => { try { const [nextDashboard, nextRuntime] = await Promise.all([api.dashboard(), api.agentStatus()]); setDashboard(nextDashboard); setRuntime(nextRuntime); } catch { setError("Relay API is unavailable. Check that the backend is running and reachable."); } };
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  const [detail, setDetail] = useState<RescueDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, RescueDetail>>({});
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+
+  const [recipients, setRecipients] = useState<NetworkRecipient[] | null>(null);
+  const [drivers, setDrivers] = useState<NetworkDriver[] | null>(null);
+  const [networkError, setNetworkError] = useState<string | null>(null);
+
+  const [heroBusy, setHeroBusy] = useState(false);
+  const [heroResult, setHeroResult] = useState<HeroSummary | null>(null);
+  const [heroError, setHeroError] = useState<string | null>(null);
+  const inflight = useRef(false);
+
+  /* Dashboard + runtime status: the same two calls as before, polled every 3 s. */
+  const load = useCallback(async () => {
+    if (inflight.current) return;
+    inflight.current = true;
+    setRefreshing(true);
+    try {
+      const [nextDashboard, nextRuntime] = await Promise.all([api.dashboard(), api.agentStatus()]);
+      setDashboard(nextDashboard);
+      setRuntime(nextRuntime);
+      setLoadError(null);
+      setLastRefresh(Date.now());
+    } catch (error) {
+      setLoadError(describe(error));
+    } finally {
+      inflight.current = false;
+      setRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [load]);
   useEffect(() => {
-    const timer = window.setInterval(() => { void load(); }, 3000);
+    const timer = window.setInterval(() => { void load(); }, POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [load]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 10_000);
     return () => window.clearInterval(timer);
   }, []);
-  const open = async (rescue: Rescue) => { setBusy(true); try { setDetail(await api.rescue(rescue.id)); setView("Rescues"); } catch { setError("Unable to load rescue details."); } finally { setBusy(false); } };
-  const runHero = async () => { setBusy(true); setError(null); try { const result = await api.runHero(); await load(); await open({ id: result.rescue_id } as Rescue); } catch { setError("The hero workflow could not run. Check backend logs and demo database setup."); } finally { setBusy(false); } };
-  const content = detail ? <Detail detail={detail} back={() => setDetail(null)} /> : view === "Overview" ? <><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold text-relay">OPERATIONS COMMAND CENTER</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Coordinate every rescue with evidence.</h1><p className="mt-2 max-w-2xl text-slate-600">Observe, reason, act, verify, recover, and escalate only when deterministic systems cannot safely continue.</p></div><button onClick={runHero} disabled={busy} className="rounded-lg bg-relay px-4 py-3 font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">{busy ? "Running real hero workflow…" : "Run synthetic hero demo"}</button></div><p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">Demo environment — metrics and organizations are synthetic, not production impact.</p><div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metricLabels.map(([key, label]) => <div key={key} className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-2 text-3xl font-bold">{dashboard?.metrics[key] ?? 0}</p></div>)}</div><div className="mt-6 grid gap-5 xl:grid-cols-3"><div className="xl:col-span-2"><h2 className="mb-3 text-lg font-bold">Active and recent rescues</h2><RescueTable rescues={dashboard?.rescues ?? []} select={(rescue) => void open(rescue)} /></div><Panel title="Relay control boundary"><ol className="space-y-3 text-sm"><li><b>Observe</b> external events</li><li><b>Reason</b> with bounded agents</li><li><b>Act</b> through authorization</li><li><b>Verify</b> delivery evidence</li><li><b>Recover</b> deterministic failures</li><li><b>Escalate</b> only ambiguous evidence</li></ol><p className="mt-5 border-t pt-4 text-xs text-slate-500">Relay&apos;s narrow Intake Agent runs on Amazon Bedrock AgentCore; the rescue engine, policy gates, and human review stay in the Relay API.</p></Panel></div></> : view === "Rescues" ? <><h1 className="text-3xl font-bold">Rescues</h1><p className="mt-2 text-slate-600">Operational cases ordered by their latest activity.</p><div className="mt-5"><RescueTable rescues={dashboard?.rescues ?? []} select={(rescue) => void open(rescue)} /></div></> : view === "Network" ? <Network /> : view === "Decisions" ? <Decisions dashboard={dashboard} reload={load} /> : view === "Activity" ? <Activity rescue={selected} open={open} /> : view === "Policies" ? <Policies /> : <DemoControl busy={busy} runHero={runHero} />;
-  return <main className="min-h-screen bg-canvas"><div className="mx-auto flex max-w-[1600px]"><aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-slate-200 bg-white p-5 lg:block"><div className="mb-10"><p className="text-2xl font-black tracking-tight text-relay">relay</p><p className="mt-1 text-xs font-semibold uppercase tracking-widest text-slate-500">Food rescue operations</p><p className="mt-4 inline-block rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Synthetic demo</p></div><nav className="space-y-1">{navigation.map((item) => <button key={item} onClick={() => { setDetail(null); setView(item); }} className={`w-full rounded-lg px-3 py-2 text-left text-sm font-semibold ${view === item && !detail ? "bg-emerald-50 text-relay" : "text-slate-600 hover:bg-slate-50"}`}>{item}</button>)}</nav></aside><div className="min-w-0 flex-1"><header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4"><div className="lg:hidden font-black text-relay">relay</div><p className="text-sm text-slate-500">Environment <b className="text-slate-700">Demo / synthetic data</b></p><div className="flex items-center gap-5">{headerExtra}<button onClick={() => void load()} className="text-sm font-semibold text-relay">Refresh data</button></div></header><section className="p-5 md:p-8">{error && <div className="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}{content}</section></div></div></main>;
-}
 
-function Network() { const [recipients, setRecipients] = useState<NetworkRecipient[]>([]); const [drivers, setDrivers] = useState<NetworkDriver[]>([]); useEffect(() => { void Promise.all([api.recipients(), api.drivers()]).then(([nextRecipients, nextDrivers]) => { setRecipients(nextRecipients); setDrivers(nextDrivers); }); }, []); return <><h1 className="text-3xl font-bold">Network</h1><p className="mt-2 text-slate-600">Synthetic recipients and drivers are loaded from deterministic backend services.</p><div className="mt-6 grid gap-4 md:grid-cols-2">{recipients.map((recipient) => <Panel title={recipient.name} key={recipient.id}><p className="text-sm">{recipient.accepted_food_categories.join(" · ") || "No declared categories"}</p><p className="mt-2 text-sm">Capacity {recipient.available_capacity}/{recipient.total_capacity} · reliability {Math.round(recipient.reliability * 100)}%</p><p className="mt-2 text-sm text-emerald-700">{recipient.cold_storage_available ? "Cold storage capable" : "Ambient storage only"}</p></Panel>)}{drivers.map((driver) => <Panel title={driver.name} key={driver.id}><p className="text-sm capitalize">{driver.vehicle_type} · capacity {driver.vehicle_capacity}</p><p className="mt-2 text-sm">{driver.refrigerated_vehicle ? "Refrigerated vehicle" : "Standard vehicle"} · reliability {Math.round(driver.reliability * 100)}%</p><Status>{driver.status}</Status></Panel>)}</div></>; }
-function DemoControl({ busy, runHero }: { busy: boolean; runHero: () => Promise<void> }) { return <><h1 className="text-3xl font-bold">Demo control</h1><p className="mt-2 max-w-2xl text-slate-600">Run the complete deterministic hero workflow through the backend. This seeds synthetic records, invokes real services and recovery logic, and then opens its persisted result.</p><Panel title="Synthetic hero scenario"><p className="text-sm text-slate-600">Recipient refrigeration loss, driver cancellation, ambiguous preparation evidence, a permitted human resolution, pickup, delivery, and receipt verification.</p><button onClick={() => void runHero()} disabled={busy} className="mt-5 rounded-lg bg-relay px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? "Running real workflow…" : "Seed and run hero scenario"}</button></Panel></>; }
-function Decisions({ dashboard, reload }: { dashboard: Dashboard | null; reload: () => Promise<void> }) { const items = dashboard?.decisions ?? []; return <><h1 className="text-3xl font-bold">Decision center</h1><p className="mt-2 text-slate-600">Only evidence gaps and policy-sensitive actions reach people.</p><div className="mt-6">{items.length ? items.map((item) => <Panel title={String(item.issue ?? "Decision request")} key={String(item.id)}><p className="text-sm">Status: <Status>{String(item.status)}</Status></p><button className="mt-4 rounded-md border px-3 py-2 text-sm font-semibold" onClick={() => void api.resolveDecision(String(item.id), String((item.allowed_options as string[])[0] ?? "approved")).then(reload)}>Resolve permitted option</button></Panel>) : <Empty title="No pending human decision" body="The hero workflow shows a resolved evidence decision in the rescue timeline." />}</div></>; }
-function Activity({ rescue, open }: { rescue: Rescue | null; open: (rescue: Rescue) => Promise<void> }) { return <><h1 className="text-3xl font-bold">Activity</h1><p className="mt-2 text-slate-600">Recent event evidence is available from each rescue&apos;s immutable timeline.</p>{rescue ? <button onClick={() => void open(rescue)} className="mt-5 rounded-lg bg-relay px-4 py-3 font-semibold text-white">Open latest rescue timeline</button> : <div className="mt-5"><Empty title="No activity yet" body="Run the hero demo to produce real events and agent audit records." /></div>}</>; }
-function Policies() { return <><h1 className="text-3xl font-bold">Policies</h1><div className="mt-6 grid gap-4 md:grid-cols-3"><Panel title="Green"><p className="text-sm">Routine search and replacement actions may proceed autonomously.</p></Panel><Panel title="Amber"><p className="text-sm">Splits and substitutions require active policy permission.</p></Panel><Panel title="Red"><p className="text-sm">Safety overrides and missing evidence require human judgment.</p></Panel></div></>; }
+  /* Network lists: existing endpoints, loaded once and refreshed when a run finishes. */
+  const loadNetwork = useCallback(async () => {
+    try {
+      const [nextRecipients, nextDrivers] = await Promise.all([api.recipients(), api.drivers()]);
+      setRecipients(nextRecipients);
+      setDrivers(nextDrivers);
+      setNetworkError(null);
+    } catch (error) {
+      setNetworkError(describe(error));
+    }
+  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadNetwork(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadNetwork]);
+
+  const resolveName = useCallback((id: string): string | undefined => {
+    return recipients?.find((item) => item.id === id)?.name ?? drivers?.find((item) => item.id === id)?.name;
+  }, [recipients, drivers]);
+
+  /* Rescue detail (command-center endpoint). */
+  const open = useCallback(async (target: Rescue | string) => {
+    const id = typeof target === "string" ? target : target.id;
+    setDetailLoading(true);
+    setDetailError(null);
+    setView("Rescues");
+    window.scrollTo({ top: 0 });
+    try {
+      const next = await api.rescue(id);
+      setDetail(next);
+      setDetails((previous) => ({ ...previous, [id]: next }));
+    } catch (error) {
+      setDetailError(describe(error));
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  /* Details cache for Overview (latest rescue) and Activity (recent rescues); refetched only when
+     a rescue's updated_at changes so polling stays cheap. */
+  const wanted = useMemo(() => {
+    const rescues = dashboard?.rescues ?? [];
+    if (view === "Activity") return rescues.slice(0, ACTIVITY_RESCUES);
+    if (view === "Overview") return rescues.slice(0, 1);
+    return [];
+  }, [dashboard, view]);
+  useEffect(() => {
+    const missing = wanted.filter((rescue) => details[rescue.id]?.rescue.updated_at !== rescue.updated_at);
+    if (!missing.length) return;
+    let cancelled = false;
+    void Promise.all(missing.map(async (rescue) => [rescue.id, await api.rescue(rescue.id)] as const))
+      .then((entries) => { if (!cancelled) { setDetails((previous) => ({ ...previous, ...Object.fromEntries(entries) })); setDetailsError(null); } })
+      .catch((error: unknown) => { if (!cancelled) setDetailsError(describe(error)); });
+    return () => { cancelled = true; };
+  }, [wanted, details]);
+
+  const runHero = useCallback(async () => {
+    setHeroBusy(true);
+    setHeroError(null);
+    setView("Demo");
+    try {
+      const result = await api.runHero();
+      setHeroResult(result);
+      await Promise.all([load(), loadNetwork()]);
+      await open(result.rescue_id);
+    } catch (error) {
+      setHeroError(describe(error));
+    } finally {
+      setHeroBusy(false);
+    }
+  }, [load, loadNetwork, open]);
+
+  const resolveDecision = useCallback(async (id: string, option: string) => {
+    await api.resolveDecision(id, option);
+    await load();
+    if (detail) await open(detail.rescue.id);
+  }, [detail, load, open]);
+
+  const navigate = useCallback((next: View) => { setDetail(null); setDetailError(null); setView(next); window.scrollTo({ top: 0 }); }, []);
+
+  const stale = lastRefresh !== null && now - lastRefresh > STALE_MS;
+  const online = loadError === null;
+  const latest = dashboard?.rescues[0];
+  const latestDetail = latest ? details[latest.id] ?? null : null;
+
+  let content: ReactNode;
+  if (detail || detailLoading || detailError) {
+    content = detailError
+      ? <ErrorCard title="Unable to load rescue details" message={detailError} onRetry={() => detail && void open(detail.rescue.id)} />
+      : <RescueDetailView detail={detail} loading={detailLoading} onBack={() => navigate("Rescues")} resolveName={resolveName} onResolveDecision={resolveDecision} now={now} />;
+  } else if (view === "Overview") {
+    content = <OverviewView dashboard={dashboard} loading={!dashboard && !loadError} online={online} runtime={runtime} latestDetail={latestDetail} latestLoading={Boolean(latest) && !latestDetail} now={now} onOpen={open} onRunDemo={runHero} onViewAll={() => navigate("Rescues")} onViewDecisions={() => navigate("Decisions")} demoBusy={heroBusy} />;
+  } else if (view === "Rescues") {
+    content = <RescuesView dashboard={dashboard} loading={!dashboard && !loadError} now={now} onOpen={open} />;
+  } else if (view === "Network") {
+    content = <NetworkView recipients={recipients} drivers={drivers} dashboard={dashboard} error={networkError} onRetry={loadNetwork} />;
+  } else if (view === "Decisions") {
+    content = <DecisionsView dashboard={dashboard} loading={!dashboard && !loadError} now={now} onResolve={resolveDecision} onOpenRescue={open} />;
+  } else if (view === "Activity") {
+    content = <ActivityView dashboard={dashboard} details={details} loading={wanted.some((rescue) => !details[rescue.id])} error={detailsError} onRetry={() => setDetails({})} onOpenRescue={open} />;
+  } else if (view === "Policies") {
+    content = <PoliciesView />;
+  } else {
+    content = <DemoView busy={heroBusy} result={heroResult} error={heroError} onRun={runHero} onOpenRescue={open} resolveName={resolveName} />;
+  }
+
+  return (
+    <AppShell view={view} section={detail ? `Rescue ${detail.rescue.short_code}` : undefined} onNavigate={navigate} runtime={runtime} demo={dashboard?.demo ?? true} lastRefresh={lastRefresh} stale={stale} online={online} refreshing={refreshing} onRefresh={() => void load()}>
+      {loadError && <div className="mb-6"><ErrorCard message={`${loadError} Polling continues every ${POLL_MS / 1000} s.`} onRetry={() => void load()} offline={!lastRefresh} /></div>}
+      {content}
+    </AppShell>
+  );
+}

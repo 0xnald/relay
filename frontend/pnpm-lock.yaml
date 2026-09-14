@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      geist:
+        specifier: 1.7.2
+        version: 1.7.2(next@16.3.4(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@24.5.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))
+      lucide-react:
+        specifier: 1.45.0
+        version: 1.45.0(react@19.2.8)
       next:
         specifier: 16.3.4
         version: 16.3.4(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@24.5.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1154,6 +1160,11 @@ packages:
   functions-have-names@1.2.3:
     resolution: {integrity: sha512-xckBUXyTIqT97tq2x2AMb+g163b5JFysYk0x4qxNFwbfQkmNZoiRHb6sPzI9/QV33WeuvVYBUIiD4NzNIyqaRQ==}
 
+  geist@1.7.2:
+    resolution: {integrity: sha512-Gu5lDFa3pLRyoBlBPf0QIFHVdWAnpco7fS1bJm41jyLPFoguBgiubseUN2oLXMgqZ7uxAxDoXcHMhCY/fOTTgg==}
+    peerDependencies:
+      next: '>=13.2.0'
+
   generator-function@2.0.1:
     resolution: {integrity: sha512-SFdFmIJi+ybC0vjlHN0ZGVGHc3lgE0DxPAT0djjVg+kjOnSqclqmj0KQ7ykTOLP6YxoqOvuAODGdcHJn+43q3g==}
     engines: {node: '>= 0.4'}
@@ -1447,6 +1458,11 @@ packages:
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
+
+  lucide-react@1.45.0:
+    resolution: {integrity: sha512-yH1ubCAduho9UR7oJhRXIQXogksRILBiTuZC4/bQIGeB9JOkxMlSuEHyyZpo1Z3S0yWJO2KTSUZbjiNvVxeOUw==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -3229,6 +3245,10 @@ snapshots:
 
   functions-have-names@1.2.3: {}
 
+  geist@1.7.2(next@16.3.4(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@24.5.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)):
+    dependencies:
+      next: 16.3.4(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@24.5.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+
   generator-function@2.0.1: {}
 
   gensync@1.0.0-beta.2: {}
@@ -3519,6 +3539,10 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  lucide-react@1.45.0(react@19.2.8):
+    dependencies:
+      react: 19.2.8
 
   math-intrinsics@1.1.0: {}
 

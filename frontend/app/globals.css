@@ -2,7 +2,88 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color: #17222d; background: #f5f7f8; }
+/* Relay design tokens (RGB channels so Tailwind can apply alpha). */
+:root {
+  --relay-bg: 7 17 15;          /* #07110F deep green-black */
+  --relay-surface: 13 23 20;    /* #0D1714 */
+  --relay-elevated: 18 30 26;   /* #121E1A */
+  --relay-line: 37 51 45;       /* #25332D */
+  --relay-ink: 244 244 238;     /* #F4F4EE warm off-white */
+  --relay-ink-2: 166 176 170;   /* #A6B0AA */
+  --relay-ink-3: 115 125 119;   /* #737D77 */
+  --relay-mint: 105 217 138;    /* #69D98A */
+  --relay-amber: 234 182 91;    /* #EAB65B */
+  --relay-danger: 196 96 88;    /* restrained muted red */
+  color-scheme: dark;
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Arial, Helvetica, sans-serif; }
-button, input { font: inherit; }
+
+html { background: rgb(var(--relay-bg)); }
+
+body {
+  margin: 0;
+  color: rgb(var(--relay-ink));
+  background: rgb(var(--relay-bg));
+  font-family: var(--font-geist-sans), Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+/* Fine technical grid texture for large dark areas, drawn behind content via ::before. */
+.relay-grid-bg { position: relative; isolation: isolate; }
+.relay-grid-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgb(var(--relay-ink) / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--relay-ink) / 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 20% 0%, rgb(0 0 0 / 0.9), transparent 100%);
+  mask-image: radial-gradient(ellipse 80% 60% at 20% 0%, rgb(0 0 0 / 0.9), transparent 100%);
+}
+
+/* Focus ring: consistent, keyboard-only. */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgb(var(--relay-mint) / 0.7), 0 0 0 4px rgb(var(--relay-mint) / 0.16);
+  border-radius: 8px;
+}
+
+/* Custom scrollbar matching the shell. */
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--relay-line)) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgb(var(--relay-line)); border-radius: 999px; border: 3px solid rgb(var(--relay-bg)); }
+*::-webkit-scrollbar-thumb:hover { background: rgb(var(--relay-ink-3)); }
+
+/* Skeleton shimmer. */
+.relay-skeleton {
+  background: linear-gradient(90deg, rgb(var(--relay-elevated)) 0%, rgb(var(--relay-line) / 0.6) 50%, rgb(var(--relay-elevated)) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s linear infinite;
+  border-radius: 8px;
+}
+
+/* Tabular numerals for metrics and timestamps. */
+.tnum { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .relay-skeleton { animation: none; }
+}

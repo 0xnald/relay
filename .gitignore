@@ -32,3 +32,6 @@ agentcore-runtime/**/staging/
 agentcore-runtime/**/*.zip
 agentcore-runtime/**/*.log
 agentcore-runtime/RelayIntake/agentcore/relay_intake/
+
+# Local editor/agent tooling
+.claude/
