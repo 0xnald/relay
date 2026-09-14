@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, GitBranch, PlayCircle, RotateCcw, Truck, UserCheck } from "lucide-react";
+import { useSyncExternalStore } from "react";
 import { greeting } from "../../lib/format";
 import { isTerminalFailure } from "../../lib/status";
 import type { AgentRuntimeStatus, Dashboard, Rescue, RescueDetail } from "../../lib/types";
@@ -23,7 +24,14 @@ type Props = {
   demoBusy: boolean;
 };
 
+const noop = () => () => {};
+/** True only after hydration, so time-of-day text never disagrees with the prerendered HTML. */
+function useMounted(): boolean {
+  return useSyncExternalStore(noop, () => true, () => false);
+}
+
 export function OverviewView({ dashboard, loading, online, runtime, latestDetail, latestLoading, now, onOpen, onRunDemo, onViewAll, onViewDecisions, demoBusy }: Props) {
+  const mounted = useMounted();
   const metrics = dashboard?.metrics ?? {};
   const rescues = dashboard?.rescues ?? [];
   const active = rescues.filter((item) => item.status !== "completed" && !isTerminalFailure(item.status));
@@ -37,7 +45,7 @@ export function OverviewView({ dashboard, loading, online, runtime, latestDetail
       <section className="relay-grid-bg overflow-hidden rounded-card-lg border border-line bg-surface shadow-card">
         <div className="grid gap-6 p-6 md:p-8 xl:grid-cols-[1.4fr_1fr]">
           <div>
-            <Label>{greeting(new Date(now))}</Label>
+            <Label>{mounted ? greeting(new Date(now)) : "Operations"}</Label>
             <h1 className="mt-2 text-3xl font-bold text-ink">Rescue operations</h1>
             <p className="mt-3 max-w-xl text-md text-ink-2">Relay is coordinating your active food-rescue network. Routine failures are recovered autonomously; only ambiguous evidence reaches a person.</p>
             <div className="mt-6 flex flex-wrap gap-2">
