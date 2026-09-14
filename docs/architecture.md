@@ -13,6 +13,14 @@ The central design constraint is that probabilistic reasoning may help coordinat
 not become the source of truth for rescue state, authorization, food-handling requirements, or
 business rules.
 
+## Deployed system
+
+![Relay architecture](architecture.svg)
+
+Blue boxes are deterministic policy and state logic, purple rounded nodes are bounded LLM
+reasoning, amber diamonds are human judgment. The command center runs on Vercel, the Relay API and
+PostgreSQL on Railway, and only the narrow Intake Agent on Amazon Bedrock AgentCore Runtime.
+
 ## System context
 
 ```mermaid
