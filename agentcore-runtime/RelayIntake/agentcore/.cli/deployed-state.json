@@ -1,0 +1,17 @@
+{
+  "targets": {
+    "default": {
+      "resources": {
+        "runtimes": {
+          "relay_intake": {
+            "runtimeId": "RelayIntake_relay_intake-hT8Z8OBxX6",
+            "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:221950623476:runtime/RelayIntake_relay_intake-hT8Z8OBxX6",
+            "roleArn": "arn:aws:iam::221950623476:role/AgentCore-RelayIntake-def-ApplicationAgentRelayInta-Kl7yc6E9aPDj"
+          }
+        },
+        "stackName": "AgentCore-RelayIntake-default",
+        "deployHash": "dd1e7dd108b8b8da"
+      }
+    }
+  }
+}

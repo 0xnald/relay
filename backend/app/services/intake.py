@@ -1,6 +1,6 @@
 import re
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.agents.factory import AgentFactory
 from app.agents.prompts import INTAKE_PROMPT_VERSION
@@ -14,7 +14,9 @@ from app.schemas.intake import (
     IntakeCompletenessResult,
     IntakeCompletenessStatus,
 )
-from app.services.agent_audit import AgentInvocationAuditService
+
+if TYPE_CHECKING:
+    from app.services.agent_audit import AgentInvocationAuditService
 
 AUTHORITATIVE_SAFETY_PATTERN = re.compile(
     r"\b(food|it|this|chicken|meal|donation)\s+is\s+(safe|unsafe|approved for consumption)\b",
@@ -72,7 +74,7 @@ class IntakeAgentService:
         self,
         agent_factory: AgentFactory,
         evaluator: IntakeCompletenessEvaluator | None = None,
-        audit_service: AgentInvocationAuditService | None = None,
+        audit_service: "AgentInvocationAuditService | None" = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._evaluator = evaluator or IntakeCompletenessEvaluator()

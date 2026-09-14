@@ -20,3 +20,15 @@ frontend/node_modules/
 frontend/.next/
 frontend/*.tsbuildinfo
 .pnpm-store/
+
+# Local Python isolation environments and per-phase pytest scratch directories
+.agentcore-isolated*/
+.pytest-phase*/
+.uv-cache/
+
+# AgentCore local state and generated deployment artifacts (regenerate with
+# scripts/prepare_agentcore_intake_package.py and the AgentCore CLI)
+agentcore-runtime/**/staging/
+agentcore-runtime/**/*.zip
+agentcore-runtime/**/*.log
+agentcore-runtime/RelayIntake/agentcore/relay_intake/

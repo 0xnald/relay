@@ -1,7 +1,8 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+if TYPE_CHECKING:
+    from fastapi import FastAPI, Request
+    from fastapi.responses import JSONResponse
 
 
 class RelayError(Exception):
@@ -110,9 +111,13 @@ class AgentExecutionInvalidResponse(RelayError):
         )
 
 
-def install_error_handlers(app: FastAPI) -> None:
+def install_error_handlers(app: "FastAPI") -> None:
+    # Web dependencies are loaded only for FastAPI application setup. The
+    # narrow AgentCore intake runtime imports these error types without FastAPI.
+    from fastapi.responses import JSONResponse
+
     @app.exception_handler(RelayError)
-    async def relay_error_handler(request: Request, exc: RelayError) -> JSONResponse:
+    async def relay_error_handler(request: "Request", exc: RelayError) -> "JSONResponse":
         payload: dict[str, Any] = {
             "error": {"code": exc.code, "message": exc.message},
             "trace_id": getattr(request.state, "trace_id", None),
