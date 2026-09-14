@@ -208,6 +208,15 @@ single demo control runs the existing executable hero scenario through real repo
 services, state transitions, exception recovery, and receipt verification. It does not add AgentCore
 or external operational integrations.
 
+Phase 6 deploys Relay's narrow Intake Agent to Amazon Bedrock AgentCore Runtime (`relay_intake`,
+Python 3.12 CodeZip, `us-east-1`) and verifies it with real remote invocations: a normal donation
+returns `ready`, missing handling evidence returns `needs_clarification`, a hostile prompt returns
+`requires_human_review`, and output containing an authoritative safety phrase is rejected
+fail-closed by Relay's deterministic guard. CloudWatch runtime logs and Transaction Search are
+verified; application X-Ray spans are not, because the narrow package intentionally ships no OTLP
+exporter. AgentCore hosts only the Intake Agent, not the backend. See
+[AgentCore deployment](docs/agentcore-deployment.md).
+
 ## License
 
 [MIT](LICENSE)

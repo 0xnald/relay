@@ -92,8 +92,9 @@ memory for operational state.
 Strands lifecycle hooks record the agent name, trace ID, tool name, outcome, and latency. Relay
 persists safe invocation metadata in `agent_invocations` and queued clarifications in
 `communication_requests`. Prompts, donor message bodies, credentials, secrets, and hidden reasoning
-are excluded from telemetry and audit records. This abstraction can later feed OpenTelemetry or
-Bedrock AgentCore observability without changing the agent services.
+are excluded from telemetry and audit records. The same hooks run unchanged inside the deployed
+AgentCore Intake runtime; see [AgentCore deployment](agentcore-deployment.md) for what is and is
+not observable there.
 
 ## Testing and live Bedrock verification
 

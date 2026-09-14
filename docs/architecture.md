@@ -33,8 +33,10 @@ flowchart TB
     Store --> Audit[Events, actions, executions, and evidence]
 ```
 
-Strands intake and coordination agents are implemented in Phase 3. External delivery, matching,
-routing, and AgentCore integrations remain architectural seams and are not presented as deployed.
+Strands intake and coordination agents are implemented in Phase 3. The narrow Intake Agent is
+deployed to Amazon Bedrock AgentCore Runtime and remotely verified in Phase 6 (see
+[AgentCore deployment](agentcore-deployment.md)); the rest of the backend runs locally. External
+delivery and live routing remain architectural seams and are not presented as deployed.
 
 ## Component boundaries
 
