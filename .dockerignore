@@ -1,0 +1,11 @@
+# Keep the API image to source, lockfile, and migrations only.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!alembic.ini
+!backend/app/
+!backend/migrations/
+!scripts/start_api.sh
+**/__pycache__/
+**/*.py[cod]

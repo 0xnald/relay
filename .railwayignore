@@ -1,0 +1,20 @@
+# Only the API image inputs are needed on Railway (see .dockerignore).
+.venv/
+.agentcore-isolated*/
+.pytest*/
+.uv-cache/
+.mypy_cache/
+.ruff_cache/
+.git/
+frontend/
+agentcore-runtime/
+docs/
+backend/tests/
+backend/agentcore/
+backend/agentcore_runtime.py
+backend/requirements-agentcore.txt
+scripts/prepare_agentcore_intake_package.py
+scripts/run_hero_scenario.py
+scripts/smoke_intake_agent.py
+*.db
+*.log
